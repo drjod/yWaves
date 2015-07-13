@@ -7,7 +7,7 @@ Germany. As far as I know, it is the first time that somebody uses the implement
 numerical scheme in the context of surface runoff and flow networks.
 The following figure shows results of the dam break problem:
 
-![dambreak](https://cloud.githubusercontent.com/assets/12182426/7442274/c28b4a12-f10a-11e4-8237-28681d59c856.jpg)
+![riemann](https://cloud.githubusercontent.com/assets/12182426/8646870/885ac396-2953-11e5-83ea-d62e0ea2a4fb.jpg)
 
 ##Get yWaves run
 Requirements are Python and Matplotlib. Latter to get simulation results into plots, which are dynamically updated in runtime. 
