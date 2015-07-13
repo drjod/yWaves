@@ -1,0 +1,40 @@
+OPTIONS
+0                  Calculate momentum ? 0: No, 1: Yes (Saint-Venant equation)                                    
+4                  0: upwind, 1: LaxWendroff, 2: BeamWarming, 3: Fromm, 4: VanLeer, 5: minmod                    
+0.0 600. 1.        time start, end, dt                                                                            
+0 0.0 0.0 0.0      time step mode (0: constant time stepping, 1: adaptive), savety factor, factor_min, factor_max
+
+
+NODES              
+(number, elevation, effectiveSaturation, source Term, boundaryCondition) 
+0          0.          0.7                 0.                1.
+1          0.          0.7                 0.                NO
+2          0.          0.7                 0.                NO
+3          0.          0.7                 0.                NO
+4          0.          0.7                 0.                NO
+5          0.          0.7                 0.                NO
+
+
+LINKS   
+(number, nodenumbers[up, down], length, costitutiveLawNumber, initialVelocity, sourceTerm, boundaryCondition)
+0                    0    1    0.2        0                  0.0          0        NO
+1                    1    2    0.2        0                  0.0          0        NO
+2                    2    3    0.2        1                  0.0          0        NO
+3                    3    4    0.2        1                  0.0          0        NO
+4                    4    5    0.2        1                  0.0          0        NO
+
+
+CONSTITUTIVE_LAWS
+0 brooksCorey 1.e-3 2.    constitutiveLawNumber (to assign to link), type, conductivityValue lambdaValue
+1 brooksCorey 1.e-5 2. 
+
+
+OUTPUTS
+
+PROFILE NODES 
+0 1 2 3 4 5
+waterDepth  
+
+
+     
+END

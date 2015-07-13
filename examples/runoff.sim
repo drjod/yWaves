@@ -1,0 +1,69 @@
+OPTIONS
+0               Calculate momentum ? 0: No, 1: Yes (Saint-Venant equation)                                    
+0               0: upwind, 1: LaxWendroff, 2: BeamWarming, 3: Fromm, 4: VanLeer, 5: minmod                    
+0. 1800. 20.    time start, end, dt                                                                           
+0 0.0 0.0 0.0   time step mode (0: constant time stepping, 1: adaptive), savety factor, factor_min, factor_max
+
+
+
+NODES              
+(number, elevation, initialWaterDepth, sourceTerm, boundaryCondition)                  
+0         2.         1.e-10               1.e-5       NOFLOW
+1         1.99       1.e-10               1.e-5       NO
+2         1.98       1.e-10               1.e-5       NO
+3         1.97       1.e-10               1.e-5       NO
+4         1.96       1.e-10               1.e-5       NO
+5         1.95       1.e-10               1.e-5       NO
+6         1.94       1.e-10               1.e-5       NO
+7         1.93       1.e-10               1.e-5       NO
+8         1.92       1.e-10               1.e-5       NO
+9         1.91       1.e-10               1.e-5       NO
+10        1.90       1.e-10               1.e-5       NO
+
+
+
+LINKS   
+(number, nodenumbers[up, down], length, constitutiveLawNumber, initialVelocity, sourceTerm, boundaryCondition) 
+0                  0      1      10.       0                    1.e-10              0         NO
+1                  1      2      10.       0                    1.e-10              0         NO     
+2                  2      3      10.       0                    1.e-10              0         NO       
+3                  3      4      10.       0                    1.e-10              0         NO       
+4                  4      5      10.       0                    1.e-10              0         NO       
+5                  5      6      10.       0                    1.e-10              0         NO       
+6                  6      7      10.       0                    1.e-10              0         NO       
+7                  7      8      10.       0                    1.e-10              0         NO       
+8                  8      9      10.       0                    1.e-10              0         NO       
+9                  9      10     10.       0                    1.e-10              0         NO       
+    
+  
+
+CONSTITUTIVE_LAWS
+0 manning  0.02         constitutiveLawNumber (to assign to link), type, manningFrictionValue
+
+
+
+OUTPUTS
+    
+PROFILE NODES 
+0 1 2 3 4 5 6 7 8 9 10
+waterDepth   
+
+PROFILE LINKS
+0 1 2 3 4 5 6 7 8 9 
+velocity 
+
+PROFILE LINKS
+0 1 2 3 4 5 6 7 8 9
+froudeNumber 
+          
+SINGLE LINK 9        
+flux 
+
+
+
+END
+
+
+
+
+
