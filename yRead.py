@@ -1,349 +1,253 @@
-####################################################################################
-#
-# yWaves class yRead by JOD
-#
-####################################################################################
+from yNetwork import yNetwork
+from yConnector import yConnector
+from yOutput import yOutput
+from yLaws import yLaw
+from yNumerics import yNumerics
+from yTimeStepping import yTimeStepping
+from yOptions import gravity
 
-
-import yNetwork
-import yNode
-import yOutput
-import yLaws
-import os
-
-
-####################################################################################
-
-
-class yReadClass:
-
-
-    workfile      = 'input' 
-    
-    yNetwork       = -1
-    yTimeStepping  = -1
-    yOptions       = -1
-    yNumerics      = -1
-    yOutputs       = []
-    yLaws          = []
-
-                                      
-    def __init__ ( self, workfile, yNetwork, yTimeStepping, yOptions, yNumerics, yLaws, yOutputs ):
-
-        
-        self.workfile        = workfile
-        self.yNetwork        = yNetwork     
-        self.yTimeStepping   = yTimeStepping
-        self.yOptions        = yOptions  
-        self.yNumerics       = yNumerics
-        self.yLaws           = yLaws   
-        self.yOutputs        = yOutputs     
-        
-
-#####################################################################################    
-                     
            
-    def readFile ( self ):
-    
-    
-        file = open ( self.workfile, 'r' ) 
-        
-        line = file.readline () 
-        lineVariables = line.split()
-        
-        while ( len ( lineVariables ) == 0 or lineVariables[0] != "END" ):
-            
-            if ( len ( lineVariables ) == 0 ):
-            
-                pass            
-            
-            elif ( lineVariables[0] == "OPTIONS" ):
-               
-                self.readOptions ( file )
-        
-            elif ( lineVariables[0] == "NODES" ):
-            
-                self.readNodes ( file )
-        
-            elif ( lineVariables[0] == "LINKS" ):
-            
-                self.readLinks ( file )
-                
-            elif ( lineVariables[0] == "CONSTITUTIVE_LAWS" ):
-            
-                self.readLaws ( file )
-                
-            elif ( lineVariables[0] == "OUTPUTS" ):
-            
-                self.readOutputs ( file )    
-                return
-                            
-            line = file.readline () 
-            lineVariables = line.split()    
-            
-        file.closed 
-               
-                                        
-####################################################################################
-#
-# activate momentum balance for Saint-Venant
-# select numerical scheme (flux limiter)
-# specify time stepping (fixed or adaptive)
-#
+def read_inputfile(filename):
+    numerics = None
+    timemarching = None
+    laws = []
+    outputs = []
+    network = yNetwork()
+
+    try:
+        file = open(filename, 'r')
+    except Exception as err:
+        print(err)
+        return None, None, None, None, None
+
+    line = file.readline()
+    line_variables = line.split()
+
+    while not line_variables or line_variables[0] != "END":
+        if not line_variables:
+            pass
+        elif line_variables[0] == "OPTIONS":
+            numerics, timemarching = read_options(file)
+        elif line_variables[0] == "NODES":
+            read_nodes(file, network)
+        elif line_variables[0] == "LINKS":
+            read_links(file, network)
+        elif line_variables[0] == "CONSTITUTIVE_LAWS":
+            laws = read_laws(file)
+        elif line_variables[0] == "OUTPUTS":
+            outputs = read_outputs(file, timemarching, network)
+            break
+
+        line = file.readline()
+        line_variables = line.split()
+
+    file.close()
+
+    return numerics, timemarching, network, laws, outputs
 
 
-    def readOptions ( self, file ):   
-         
-  
-        lineVariables = []
-        
-        #momentum
-        line = file.readline ()
-        lineVariables = line.split()
-        self.yOptions.momentum = int ( lineVariables[0] )
-        
-        #numerics
-        line = file.readline ()
-        lineVariables = line.split()
-        self.yNumerics.methodNumber = int ( lineVariables[0] )
-           
-        # timeStepping
-        line = file.readline ()
-        lineVariables = line.split()
-        self.yTimeStepping.current = float ( lineVariables[0] )
-        self.yTimeStepping.end = float ( lineVariables[1] )
-        self.yTimeStepping.dt = float ( lineVariables[2] )
-        
-        # adaptive
-        line = file.readline ()
-        lineVariables = line.split()
-        self.yTimeStepping.adaptive = int ( lineVariables[0] )
-        self.yTimeStepping.savetyFactor = float ( lineVariables[1] )
-        self.yTimeStepping.factor_min = float ( lineVariables[2] )
-        self.yTimeStepping.factor_max = float ( lineVariables[3] )
-        
-            
-####################################################################################  
-#
-# collect nodes (they host scalar entities - water depth) 
-# and append them as yNodes on yGrid 0 of the yNetwork 
-#          
+def read_options(file):
+    """
+    activate momentum balance for Saint-Venant
+    select numerical scheme(flux limiter)
+    specify time stepping(fixed or adaptive)
+    :param file:
+    :return:
+    """
+
+    line_variables = list()
+    # momentum
+    line = file.readline()
+    line_variables = line.split()
+    momentum_flac = int(line_variables[0])
+    # numerics
+    line = file.readline()
+    line_variables = line.split()
+    numerics = yNumerics(int(line_variables[0]), momentum_flac)
+    # timemarching
+    line = file.readline()
+    line_variables = line.split()
+    current, end, stepsize = float(line_variables[0]), float(line_variables[1]), float(line_variables[2])
+    # adaptive
+    line = file.readline()
+    line_variables = line.split()
+    timemarching = yTimeStepping(current, end, stepsize,
+                                 int(line_variables[0]),  # adaptive
+                                 float(line_variables[1]),  # safetyfactor
+                                 float(line_variables[2]),  # factor_min
+                                 float(line_variables[3]))  # factor_max
+
+    return numerics, timemarching
 
 
-    def readNodes ( self, file ):
-   
-        lineVariables = []   
-        line = file.readline ()  # next line
-        line = file.readline () 
-        lineVariables = line.split() # 0: number, 1: elevation, 2: initialWaterDepth, 3: sourceTerm, 4: boundaryCondition
-        
-        
-        while ( len ( lineVariables ) > 0 ):
+def read_nodes(file, network):
+    """
+    collect nodes from file
+    nodes host scalar entities - water depth
+    :param file:
+    :param network:
+    :return:
+    """
+    line = file.readline()  # next line
+    line = file.readline()
+    line_variables = line.split()
+    # 0: number, 1: elevation, 2: initialWaterDepth, 3: source_term, 4: boundary_condition
 
-            upwindNodesNumber = []  
-            downwindNodesNumber = []
-                     
-            #                          number                    waterDepth [new, old]                                     no ghost
-            nodeNew = yNode.yNodeClass ( int ( lineVariables[0] ), [float ( lineVariables[2] ), float ( lineVariables[2] )], 0, upwindNodesNumber, downwindNodesNumber )  
-            
-            nodeNew.geometry = float ( lineVariables[1] ) 
-            nodeNew.sourceTerm = float ( lineVariables[3] )  
-            nodeNew.boundaryCondition = lineVariables[4]                        
-            self.yNetwork.yGrids[0].yNodes.append ( nodeNew )
-            
-            line = file.readline ()
-            lineVariables = line.split()  
-            
-                         
-####################################################################################  
-#
-# collect links (they host vector entities - velocity) 
-# and append them as yNodes on yGrid 1 of the yNetwork 
-#          
-# each link has an upwind and a downwind node
-# specifiation in imput file states who is who 
-#
+    while line_variables:
 
-    def readLinks ( self, file ):
+        # 0: number, 1: elevation, 2: initialWaterDepth, 3: source_term, 4: boundary_condition
+        connector = yConnector(int(line_variables[0]),  # id
+                                float(line_variables[1]),  # geometry (elevation)
+                                [float(line_variables[2]), float(line_variables[2])],  # waterDepth [new, old]
+                                0,  # no ghost
+                                float(line_variables[3]),  # source term
+                                line_variables[4],  # boundary condition (string)
+                                [[], []],  # immediate connectors id [upwind, downwind]
+                                0,  # length assigned later (None causes crash)
+                                None)  # law_id
 
-    
-        lineVariables = []   
-        line = file.readline ()  # next line
-        line = file.readline () 
-        lineVariables = line.split() # 0: number, 1,2: nodenumbers[up, down], 3: dx, 4: conductance, 5: velocity, 6: sourceTerm, 7: boundaryCondition
-        
-        
-        while ( len ( lineVariables ) > 0 ):
-      
-            upwindNodesNumber = [] 
-            downwindNodesNumber = []
-         
-            #                          number                    velocity_dtdx [new, old]                                                                                                                       no ghost
-            nodeNew = yNode.yNodeClass ( int ( lineVariables[0] ), [float ( lineVariables[5] ),float ( lineVariables[5] )], 0, upwindNodesNumber, downwindNodesNumber )      
- 
-            nodeNew.geometry =  ( self.yNetwork.yGrids[0].yNodes[int ( lineVariables[1] )].geometry - self.yNetwork.yGrids[0].yNodes[int ( lineVariables[2] )].geometry ) / float ( lineVariables[3] )
-            if ( nodeNew.geometry < 0 ):
-                print ( "Warning: Slope < 0 at link " + str( int ( lineVariables[0] ) ) )
-            
-            nodeNew.dx = float ( lineVariables[3] )
-            nodeNew.lawNumber = int ( lineVariables[4] )                                  
-            nodeNew.sourceTerm = float ( lineVariables[6] )      # multiplication with dx in network.construct ()
-            nodeNew.boundaryCondition = lineVariables[7]                                                         
-            nodeNew.upwindNodesNumber.append ( int ( lineVariables[1] ) )  
-            nodeNew.downwindNodesNumber.append ( int ( lineVariables[2] ) )                       
-            self.yNetwork.yGrids[1].yNodes.append ( nodeNew )
-                    
-            line = file.readline ()
-            lineVariables = line.split()            
-                      
-        
-###################################################################################### 
-#
-# collect constitutive equations (for yLawClass)
-# and append them on the yLaws vector 
-#
-        
-    def readLaws ( self, file ): 
-    
-        
-        line = file.readline ()
-        lineVariables = line.split()
-        
-        while ( len ( lineVariables ) > 0 ):
-        
-            lawNew = yLaws.yLawClass ( int ( lineVariables[0] ) ) 
-            
-            if ( lineVariables[1] == "constant" ):   # linear advection 
-            
-                lawNew.lawType = 0
-                lawNew.values.append ( float ( lineVariables[2] ) )
-                
-            elif ( lineVariables[1] == "manning" ):
-            
-                lawNew.lawType = 1
-                lawNew.values.append ( 1. / float ( lineVariables[2] ) )  #  C = 1 / n
-            
-            elif ( lineVariables[1] == "darcyWeissbach" ):
-                                       
-                lawNew.lawType = 2
-                lawNew.values.append ( sqrt ( 8 * options.gravity / ( float ( lineVariables[2] ) ) )   )   #  C = (8g/f)^,5
-            
-            elif (lineVariables[1] == "brooksCorey"):
-            
-                lawNew.lawType = 3
-                lawNew.values.append ( float ( lineVariables[2] ) )   
-                lawNew.values.append ( ( 2 + 3 * float ( lineVariables[3] )  / ( float ( lineVariables[3] ) ) ) - 1  )    
-																							#  a - 1 = ( ( 2 + 3 lambda ) / lambda ) - 1                     
+        network.grids[0].connectors.append(connector)
+
+        line = file.readline()
+        line_variables = line.split()
+
+
+def read_links(file, network):
+    """
+    collect links from file
+    vectors host vector entities - velocity
+    :param file:
+    :param network:
+    :return:
+    """
+    line = file.readline()  # next line
+    line = file.readline()
+    line_variables = line.split()
+    # 0: number, 1,2: connectors_is[up, down], 3: length, 4: conductance,
+    # 5: velocity, 6: source_term, 7: boundary_condition
+
+    while line_variables:
+        connector = yConnector(int(line_variables[0]),  # id
+                                (network.grids[0].connectors[int(line_variables[1])].geometry  # geometry (slope)
+                                - network.grids[0].connectors[int(line_variables[2])].geometry)
+                               / float(line_variables[3]),
+                                [float(line_variables[5]),float(line_variables[5])],  # velocity_[new, old]
+                                0,  # no ghost
+                                float(line_variables[6]),  # source term - multiplication with length in construct()
+                                line_variables[7],  # boundary condition (string)
+                                # immediate connectors id [upwind, downwind]
+                                [[int(line_variables[1])], [int(line_variables[2])]],
+                                float(line_variables[3]),  # length
+                                int(line_variables[4]))  # law_id
+
+        network.grids[1].connectors.append(connector)
+
+        line = file.readline()
+        line_variables = line.split()
+
+
+def read_laws(file):
+    """
+    collect constitutive equations(for yLaw)
+    and append them on the yLaws vector
+    :param file:
+    :return:
+    """
+    laws = list()
+
+    line = file.readline()
+    line_variables = line.split()
+
+    while line_variables:
+        if line_variables[1] == "constant":  # linear advection
+            law_type = 0
+            law_values = [float(line_variables[2])]
+        elif line_variables[1] == "manning":
+            law_type = 1
+            law_values = [1. / float(line_variables[2])]  # C = 1 / n
+        elif line_variables[1] == "darcyWeissbach":
+            law_type = 2
+            law_values = [8 * gravity / float(line_variables[2])]  # C =(8g/f)^0.5
+        elif line_variables[1] == "brooksCorey":
+            law_type = 3
+            law_values = [float(line_variables[2]),  # a - 1 =((2 + 3 lambda) / lambda) - 1
+                          2 + 3 * float(line_variables[3]) / float(line_variables[3])]
+        else:
+            print("Error in law.read(): Law unknown")
+            law_type = None
+            law_values = [None]
+
+        law = yLaw(int(line_variables[0]),  # law_id
+                   law_type, law_values)
+
+        laws.append(law)
+
+        line = file.readline()
+        line_variables = line.split()
+
+    return laws
+
+
+def read_outputs(file, timemarching, network):
+    """
+    collect outputs(for yOutput)
+    and append them on the yOutputs vector
+    :param file
+    :param timemarching: (class yTimestepping)
+    :param network: (class yNetwork)
+    :return:
+    """
+    outputs = list()
+
+    line = file.readline()
+    grid_id = None
+
+    while line[0] != "E":  # NOT END
+        if line[0] == "P":    # PROFILE
+            line_variables = line.split()
+            if line_variables[1] == "NODES":
+                grid_id = 0
+            elif line_variables[1] == "LINKS":
+                grid_id = 1
             else:
-            
-                print ( "Error in law.read(): Law unknown" )
-            
-                    
-            self.yLaws.append ( lawNew )    
-                
-            
-            line = file.readline ()
-            lineVariables = line.split()      
-          
-            
-####################################################################################
-#
-# collect outputs (for yOutputClass)
-# and append them on the yOutputs vector                          
-#
+                print("Error in readOutput: NODES or LINKS on PROFILE?")
+                grid_id = None
 
-    def readOutputs ( self, file ):   
-   
-    
-        line = file.readline ()  
-        gridNumber = -1
-                           
-        while ( line[0] != "E" ): # NOT END
-    
-            nodesNumber = []
-            variables = []
-            startTime = []        
-            startValues = []   
-                  
-            if ( line[0] == "P" ):    # PROFILE
-                              
-                lineVariables = line.split() 
-                
-                if ( lineVariables[1] == "NODES" ): 
-                    
-                    gridNumber = 0
-               
-                elif ( lineVariables[1] == "LINKS" ):
-                
-                    gridNumber = 1
-                      
-                else:
-                
-                    print ("Error in readOutput: NODES or LINKS on PROFILE?")     
-                 
-                            
-                line = file.readline ()  
-                lineVariables = line.split()
-                
-                for i in range (0, len ( lineVariables ), 1 ):
-                
-                    nodesNumber.append ( int ( lineVariables[i] ) )    
-            
-                
-                line = file.readline ()  
-                lineVariables = line.split()                 
-                                                             
-                for i in range (0, len ( lineVariables ), 1 ):
-                                                               
-                    variables.append ( lineVariables[i] )        
-                
-                outNew = yOutput.yOutputClass ( len ( self.yOutputs ), gridNumber, nodesNumber, variables, startTime, startValues )
-                self.yOutputs.append ( outNew )   
-                     
-                                        
-            if ( line[0] == "S" ):  #SINGLE  ( for time series )
-                     
-                lineVariables = line.split()                                     
-                                                                                 
-                if ( lineVariables[1] == "NODE" ):                              
-                                                                                 
-                    gridNumber = 0                                     
-                                                                                 
-                elif ( lineVariables[1] == "LINK" ):                            
-                                                                                 
-                    gridNumber = 1                                      
-                                                                                 
-                else:                                                            
-                                                                                 
-                    print ("Error in readOutput: NODES / LINKS on PROFILE?")    
-            
-                nodesNumber.append ( int ( lineVariables[2] ) ) 
-            
-                line = file.readline ()                          
-                lineVariables = line.split()                     
-                
-                startTime.append ( self.yTimeStepping.current )
-                    
-                                                           
-                for i in range (0, len ( lineVariables ), 1 ):    
-                                                                 
-                    variables.append ( lineVariables[i] )                  
-                    startValues.append ( self.yNetwork.yGrids[gridNumber].yNodes[nodesNumber[0]].getValue ( variables[i] ) )
-                
-                #seriesValues.append ( self.yNetwork.yGrids[gridNumber].yNodes[nodesNumber[0]].getValue ( variables[0] ) )
-                    
-                outNew = yOutput.yOutputClass ( len ( self.yOutputs ), gridNumber, nodesNumber, variables, startTime, startValues )
-                self.yOutputs.append ( outNew )          
-            
-            line = file.readline () 
+            line = file.readline()
+            line_variables = line.split()
 
-                              
-##################################################################################### 
+            connectors_id = [int(variable) for variable in line_variables]
 
+            line = file.readline()
+            line_variables = line.split()
 
+            variables = [variable for variable in line_variables]
 
+            out = yOutput(len(outputs), grid_id, connectors_id, variables, [], [])
+            outputs.append(out)
 
+        if line[0] == "S":  # SINGLE(for time series)
+            line_variables = line.split()
 
+            if line_variables[1] == "NODE":
+                grid_id = 0
+            elif line_variables[1] == "LINK":
+                grid_id = 1
+            else:
+                print("Error in readOutput: NODES / LINKS on PROFILE?")
 
+            connectors_id.append(int(line_variables[2]))
 
+            line = file.readline()
+            line_variables = line.split()
 
+            variables = [variable for variable in line_variables]
+            initial_values = [network.grids[grid_id].connectors[connectors_id[0]].get_variable_value(variable)
+                              for variable in line_variables]
+
+            out = yOutput(len(outputs), grid_id, connectors_id, variables, [timemarching.current], initial_values)
+            outputs.append(out)
+
+        line = file.readline()
+
+    return outputs

@@ -1,77 +1,58 @@
-####################################################################################
-#
-# yWaves class yTimeStepping by JOD
-#
-# fixed or adaptive based on CFL-condition (and a safety factor)
-#
-####################################################################################
+class yTimeStepping:
+    """
+    fixed or adaptive based on CFL-condition(and a safety factor)
+    """
+    def __init__(self, current, end, stepsize, adaptive, safetyfactor, factor_min, factor_max):
+        self.__current = current
+        self.__end = end
+        self.__stepsize = stepsize
+        self.__adaptive = adaptive
+        self.__safetyfactor = safetyfactor
+        self.__factor_min = factor_min
+        self.__factor_max = factor_max
 
+        self.__step = 1
+        self.__velocity_max = 0
 
-import ySimulator
+    @property
+    def current(self):
+        return self.__current
 
+    @property
+    def end(self):
+        return self.__end
 
-####################################################################################
+    @property
+    def step(self):
+        return self.__step
 
+    @property
+    def velocity_max(self):
+        return self.__velocity_max
 
-class yTimeSteppingClass:                                                                                     
-                       
-    
-    adaptive             = 0                                                                          
-    dt                   = -1. 
-    dt_max               = -1.                                                                                                          
-    current              = -1.            
-    end                  = -1. 
-    step                 = 0           
-     
-    maxVelocity          = 0
-    savetyFactor         = 0
-    
-    
-                                                                                                                                                                               
-    def __init__ ( self, current ):
-    
-    
-        self.current = current
-           
-        self.step   = 1
-        self.factor = 1.
-        
-		
-###################################################################################### 
+    @property
+    def stepsize(self):
+        return self.__stepsize
 
-        
-    def provideTimestep ( self ): 
-    
-    
-        self.factor = 1
-    
-        if ( self.adaptive == 1 ):
-        
-            factor = self.savetyFactor / ( self.maxVelocity * self.dt ) 
-            
-            factor = max ( self.factor_min, min ( factor, self.factor_max) ) 
-            
-            self.dt = self.dt * factor
-                                       
-        else:    
-            
-            if ( self.maxVelocity * self.dt  > 1 ):
+    @velocity_max.setter
+    def velocity_max(self, value):
+        self.__velocity_max = value
 
-                print ( "Warning: | sigma | > 1" ) 
-            
-        
-        if ( self.current + self.dt > self.end ):    
-                       
-            self.dt = self.end - self.current 
-            
-            
-        self.current = self.current + self.dt              
-        self.step = self.step + 1         
-                
-        
-        print ( "  Simulation time: " + str ( self.current ) )
-        print ( "  Timestep size "  + str( self.dt ) )
-        
-        
-###################################################################################### 
-          
+    def calculate_stepsize(self):
+        if self.__adaptive == 1:
+            factor = self.__safetyfactor /(self.__velocity_max * self.__stepsize)
+            factor = max(self.__factor_min, min(factor, self.__factor_max))
+            self.__stepsize *= factor
+        else:
+            if self.__velocity_max * self.__stepsize > 1:
+                print("Warning: | sigma | > 1")
+
+        if self.__current + self.__stepsize > self.__end:
+            self.__stepsize = self.__end - self.__current 
+
+        self.__current += self.__stepsize
+        self.__step += 1
+
+        print("  Simulation time: {}".format(self.__current))
+        print("  Timestep size {}".format(self.__stepsize))
+

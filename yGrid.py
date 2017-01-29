@@ -1,136 +1,79 @@
-####################################################################################
-#
-# yWaves class yGrid by JOD
-#
-# each yGrid has partnerGrid 
-# yGrid hosts yNodes for primary variables
-# while partnerGrid hosts yNodes for secondary variables
-# in case mass balance
-# yGrid primaryVariable is scalar entity (water depth)
-# yGrid primarySecondaryble is vector entity (velocity, we are in 1D, so also scalar)
-# in case momentum balance this turns (yGrid becomes partnerGrid and vice Versa)
-#
-####################################################################################
+from yMathematics import average
+from yOptions import averaging
 
+class yGrid:
+    """
+    each yGrid has partnergrid
+    yGrid hosts yConnectors for primary variables
+    while partnergridhosts yConnectors for secondary variables
+    in case mass balance
+    yGrid primary_variable is scalar entity(water depth)
+    yGrid primarySecondaryble is vector entity(velocity, we are in 1D, so also scalar)
+    in case momentum balance this turns(yGrid becomes partnergridand vice Versa)
+    """
+    __id = None
+    __slope = None
+    __partnergrid = None
 
-import yNode
-import yMathematics
+    def __init__(self, _id):
+        self.__id = _id
+        self.__connectors = list()
 
+    @property
+    def connectors(self):
+        return self.__connectors
 
-#####################################################################################
+    @property
+    def partnergrid(self):
+        return self.__partnergrid
 
+    @partnergrid.setter
+    def partnergrid(self, value):
+        self.__partnergrid = value
 
-class yGridClass:
+    def assign_boundary_conditions(self):     
+        for i in range(0, len(self.__connectors), 1):                                                                                                                                                                                                                                                          
+            if self.__connectors[i].ghost == 0:
+                if self.__connectors[i].boundary_condition == "NOFLOW":
+                    self.__partnergrid.connectors[self.__connectors[i].immediate_connectors_id[0][0]].flux = 0
+                elif self.__connectors[i].boundary_condition != "NO":   # than value
+                    self.__connectors[i].primary_variable[0] = self.__connectors[i].primary_variable[1] = \
+                        float(self.__connectors[i].boundary_condition)
 
+    def assign_centered_primary_variable(self, connector_id, timing):
+        primvars = [[],[]]  # 0: up, 1: down
 
-    number        = -1
-    yNodes        = []
-    slope         = -1
-    partnerGrid   = -1
-    
-    
-    def __init__ ( self, number, yNodes ):
+        for k in [0, 1]:  # 0: up, 1: down
+            for j in range(len(self.__connectors[connector_id].immediate_connectors_id[k])):
+                primvars[k].append(self.__partnergrid.connectors[self.__connectors[
+                    connector_id].immediate_connectors_id[k][j]].primary_variable[timing])
 
-        self.number = number
-        self.yNodes = yNodes
-        
-        
-#####################################################################################          
+        return average(primvars, averaging)
 
-  
-    def incorporateBoundaryConditions ( self ):     
-                           
-        
-        for i in range (0, len ( self.yNodes ), 1):                                                                                                                                                                                                                                                          
-                             
-            if ( self.yNodes[i].ghost == 0 ):      
-                                                                                                                                                   
-                if ( self.yNodes[i].boundaryCondition  == "NOFLOW" ):                 
-                 
-                    self.partnerGrid.yNodes[self.yNodes[i].upwindNodesNumber[0]].flux = 0
-                
-                #elif ( grid0.yNodes[nodeNumber].boundaryCondition  == "NORMAL" ):
-                
-                #     self.grid0.yNodes[nodeNumber].flux = 
-                #     laws[grid1.yNodes[nodeNumber].lawNumber].celerity ( grid1.yNodes[nodeNumber].geometry , yNetwork.primaryVariableCentered ( nodeNumber, grid0, grid1 ) )  
-                           
-                elif ( self.yNodes[i].boundaryCondition  != "NO" ):   # than value    
-                
-                    self.yNodes[i].primaryVariable[0] = self.yNodes[i].primaryVariable[1] = float ( self.yNodes[i].boundaryCondition ) 
-            
-            
-        # CRITICAL DEPTH    
-                        
-						
-#####################################################################################
- 
-       
-    def primaryVariableCentered ( self, nodeNumber, timing ):
-        
-        
-        avg = yMathematics.average
-        primVar_up = []
-        primVar_down = []  
-        
-        for j in range (0, len ( self.yNodes[nodeNumber].upwindNodesNumber ), 1 ): 
-        
-           primVar_up.append ( self.partnerGrid.yNodes[self.yNodes[nodeNumber].upwindNodesNumber[j]].primaryVariable[timing] ) 
-            
-        for j in range (0, len ( self.yNodes[nodeNumber].downwindNodesNumber ), 1 ):     
-                                                                                      
-            primVar_down.append ( self.partnerGrid.yNodes[self.yNodes[nodeNumber].downwindNodesNumber[j]].primaryVariable[timing] )       
-        
-        return avg ( [avg ( primVar_up, 0 ), avg ( primVar_down, 0 )], 0 )  # AVERAGING
-        
- 
-#####################################################################################
-        
-               
-    def updatePrimaryVariables ( self ):
-    
-    
-        numberOfUpwindNodes = -1    
-        nodeGridFlac = 0
-    
-            
-        if ( len ( self.yNodes) > len ( self.partnerGrid.yNodes ) ):  # NodesGrid  (else LinksGrid)
-        
-            nodeGridFlac = 1
-        
-       
-    
-        for i in range ( 0, len ( self.yNodes ), 1 ):   # update values on nodes
-            
-            if ( self.yNodes[i].ghost == 1 ):
-                
-            
-                if ( nodeGridFlac ):     
-                  
-                    numberOfUpwindNodes = len ( self.yNodes[i].upwindNodesNumber )
-                    
+    def update_primary_variables(self):
+        connectorgrid_flac = 0
+
+        if len(self.__connectors) > len(self.__partnergrid.connectors):  # NodesGrid (else LinksGrid)
+            connectorgrid_flac = 1
+
+        for i in range(len(self.__connectors)):   # update values on connectors
+            if self.__connectors[i].ghost == 1:
+                if connectorgrid_flac:
+                    upwindnodes_id = len(self.__connectors[i].immediate_connectors_id[0])
                 else:
-                
-                    numberOfUpwindNodes = len ( self.partnerGrid.yNodes[self.yNodes[i].upwindNodesNumber[0]].upwindNodesNumber )
-                                       
-                    
-                    
-                if ( numberOfUpwindNodes > 0 ):  # NO JUNCTION
-                    
-                    self.yNodes[i].primaryVariable[0] = self.yNodes[i].primaryVariable[1] = \
-                    self.yNodes[self.partnerGrid.yNodes[self.yNodes[i].upwindNodesNumber[0]].upwindNodesNumber[0]].primaryVariable[1]
-                    #self.yNodes[self.partnerGrid.yNodes[self.grids[0].yNodes[self.partnerGrid.yNodes[self.yNodes[i].upwindNodesNumber[0]].upwindNodesNumber[0]].upwindNodesNumber[0]].upwindNodesNumber[0]].primaryVariable[1]  
-                    
-                                                                  
-                else: 
-                                      
-                    self.yNodes[i].primaryVariable[0] = self.yNodes[i].primaryVariable[1] = \
-                    self.yNodes[self.partnerGrid.yNodes[self.yNodes[i].downwindNodesNumber[0]].downwindNodesNumber[0]].primaryVariable[1]
-                    #self.yNodes[self.partnerGrid.yNodes[self.yNodes[self.partnerGrid.yNodes[self.yNodes[i].downwindNodesNumber[0]].downwindNodesNumber[0]].downwindNodesNumber[0]].downwindNodesNumber[0]].primaryVariable[1]  
-                    
-                                       
-            else: 
-                
-                self.yNodes[i].primaryVariable[0] = self.yNodes[i].primaryVariable[1] 
+                    upwindnodes_id = len(self.__partnergrid.connectors[self.__connectors[i].immediate_connectors_id[
+                        0][0]].immediate_connectors_id[0])
+
+                if upwindnodes_id > 0:  # NO JUNCTION
+                    self.__connectors[i].primary_variable[0] = self.__connectors[i].primary_variable[1] = \
+                    self.__connectors[self.__partnergrid.connectors[self.__connectors[i].immediate_connectors_id[
+                        0][0]].immediate_connectors_id[0][0]].primary_variable[1]
+                else:
+                    self.__connectors[i].primary_variable[0] = self.__connectors[i].primary_variable[1] = \
+                    self.__connectors[self.__partnergrid.connectors[self.__connectors[i].immediate_connectors_id[
+                        1][0]].immediate_connectors_id[1][0]].primary_variable[1]
+            else:
+                self.__connectors[i].primary_variable[0] = self.__connectors[i].primary_variable[1] 
                
                               
-#####################################################################################
+

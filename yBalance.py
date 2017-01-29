@@ -1,172 +1,88 @@
-####################################################################################
-#
-# yWaves class yBalance by JOD
-#
-# operator splitting
-# advection, pressure, source term steps
-# (upwinded) Saint-Venant source terms for friction and gravity still missing
-#
-####################################################################################
+from yNumerics import calculate_flux
+from yOptions import gravity
 
 
-import yNetwork
-import yGrid
-import yMathematics
-import yOutput
-import yOptions
-import yNumerics
-import math
-
-
-
-####################################################################################
-
-
-class yBalanceClass:
-
-
-    balanceType     = 0    # 0: mass, 1 momentum
-  
-    grid0           = -1
-    grid1           = -1
-      
-    
-#################################################
-
-    
-    def __init__ ( self, yNetwork, balanceType ):
-
-   
-        self.balanceType = balanceType
+class yBalance:
+    """
+    operator splitting
+    advection, pressure, source term steps
+    (upwinded) Saint-Venant source terms for friction and gravity still missing
+    """
+    def __init__(self, network, balance_type):
+        self.__balance_type = balance_type
           
-        if ( balanceType == 0 ):   # mass
-        
-            self.grid0 = yNetwork.yGrids[0]
-            self.grid1 = yNetwork.yGrids[1]
-        
-        elif ( balanceType == 1 ):  # momentum
-        
-            self.grid0 = yNetwork.yGrids[1]     # switch grid (and primary variable)
-            self.grid1 = yNetwork.yGrids[0]
-        
+        if balance_type == 0:   # mass
+            self.__grids = [network.grids[0],  # for scalars (water depth)
+                            network.grids[1]]  # for vectors (velocity)
+
+        elif balance_type == 1:  # momentum
+            self.__grids = [network.grids[1],  # switch grid (and primary variable)
+                            network.grids[0]]
         else:
-        
-            print ( "Error: Balance type not given" )
-            
-        
-#####################################################################################          
-               
+            print("Error: Balance type must be 0 or 1")
+            self.__grids = [None, None]
 
-    def advanceTimeStep ( self, yTimeStepping, yLaws, yOptions, yNumerics ):  
+    def advance_time_step(self, timemarching, laws, numerics):
+        self.prepare_calculation(timemarching, laws, numerics)
+        self.calculate(timemarching)
 
-         
-        self.prepareCalculation ( yTimeStepping, yLaws, yOptions, yNumerics )
-        
-        self.calculate ( yTimeStepping )
+    def prepare_calculation(self, timemarching, laws, numerics):
+        for i in range(len(self.__grids[0].connectors)):
+            numerics.assign_primary_variable_slope(self.__grids, i)
+        for j in range(len(self.__grids[1].connectors)):
+            numerics.assign_velocity(self.__grids, j, timemarching, laws, self.__balance_type)
 
-        
-#####################################################################################          
-                         
-                                                                      
-    def prepareCalculation ( self, yTimeStepping, yLaws, yOptions, yNumerics ): 
-                                                      
-      
-        for i in range ( 0, len ( self.grid0.yNodes ), 1 ):
-             
-            yNumerics.assignPrimaryVariableSlope ( self.grid0, self.grid1, i )             
-                
-        
-        for j in range ( 0, len ( self.grid1.yNodes ), 1 ):   
-                                                                                                 
-            yNumerics.assignVelocity ( self.grid0, self.grid1, j, yTimeStepping, yLaws, yOptions.momentum, self.balanceType )    
-         
-                        
-        if ( self.balanceType == 0 ):    
-        
-            yTimeStepping.provideTimestep ()     
-            
-                        
-        for j in range ( 0, len ( self.grid1.yNodes ), 1 ): 
-                                                  
-            if ( self.grid0.yNodes[i].ghost == 0 or self.balanceType == 0 ):
-                                                                                                   
-                yNumerics.provideFlux ( self.grid0, self.grid1, j, yTimeStepping, self.balanceType ) 
-               
-                                                                                        
-        self.grid0.incorporateBoundaryConditions ( )     
-                
-                
-####################################################################################          
-                          
-                                                                     
-    def calculate ( self, yTimeStepping ):    
-                                                 
-               
-        for i in range ( 0, len ( self.grid0.yNodes ), 1 ):   
-                                                                             
-            if ( self.grid0.yNodes[i].ghost == 0 and self.grid0.yNodes[i].boundaryCondition == "NO" or self.grid0.yNodes[i].boundaryCondition == "NOFLOW" ):                    
-                
-                self.advectionStep ( i, yTimeStepping )
- 
-                self.pressureStep ( i, yTimeStepping )
-                           
-                self.incorporateSourceTerms ( i, yTimeStepping )
-                                                                                                                                                                                                            
-            
-#####################################################################################  
-                                  
-                                   
-    def advectionStep ( self, nodeNumber, yTimeStepping ):
+        if self.__balance_type == 0:
+            timemarching.calculate_stepsize()     
 
-  
+        for j in range(len(self.__grids[1].connectors)):
+            if not self.__grids[1].connectors[j].ghost or self.__balance_type == 0:
+                calculate_flux(self.__grids, j, timemarching, self.__balance_type)
+
+        self.__grids[0].assign_boundary_conditions()
+
+    def calculate(self, timemarching):
+        for i in range(len(self.__grids[0].connectors)):
+            if not self.__grids[0].connectors[i].ghost and self.__grids[0].connectors[i].boundary_condition == "NO" or \
+                            self.__grids[0].connectors[i].boundary_condition == "NOFLOW":
+                self.do_advection_step(i, timemarching)
+                self.do_pressure_step(i, timemarching)
+                self.assign_source_terms(i, timemarching)
+
+    def do_advection_step(self, connector_id, timemarching):
         sum_flux = 0     
-          
-        for j in range ( 0, len ( self.grid0.yNodes[nodeNumber].upwindNodesNumber ), 1 ):
-               
-            sum_flux = sum_flux  + self.grid1.yNodes[self.grid0.yNodes[nodeNumber].upwindNodesNumber[j]].flux / self.grid1.yNodes[self.grid0.yNodes[nodeNumber].upwindNodesNumber[j]].dx
-            
-        for j in range ( 0, len ( self.grid0.yNodes[nodeNumber].downwindNodesNumber ), 1 ):                                               
-                                                                                                                                           
-            sum_flux = sum_flux  - self.grid1.yNodes[self.grid0.yNodes[nodeNumber].downwindNodesNumber[j]].flux / self.grid1.yNodes[self.grid0.yNodes[nodeNumber].downwindNodesNumber[j]].dx       
-        
-                
-        if ( self.balanceType == 0 ): # mass
-                    
-            self.grid0.yNodes[nodeNumber].primaryVariable[1] = self.grid0.yNodes[nodeNumber].primaryVariable[0] + sum_flux * yTimeStepping.dt   
-            
-        
-        else: # momentum
-        
-            self.grid0.yNodes[nodeNumber].primaryVariable[1] = ( self.grid0.yNodes[nodeNumber].primaryVariable[0] * self.grid0.primaryVariableCentered ( nodeNumber, 0 ) + sum_flux * yTimeStepping.dt ) / self.grid0.primaryVariableCentered ( nodeNumber, 1 )
-        
-                   
-#####################################################################################  
 
+        for k in [0, 1]:  # 0: up, 1: down
+            for j in range(len(self.__grids[0].connectors[connector_id].immediate_connectors_id[k])):
+                sum_flux += (-1) ** k * self.__grids[1].connectors[self.__grids[0].connectors[
+                    connector_id].immediate_connectors_id[k][j]].flux / self.__grids[1].connectors[
+                    self.__grids[0].connectors[connector_id].immediate_connectors_id[k][j]].length
 
-    def pressureStep ( self, nodeNumber, yTimeStepping ):
+        if self.__balance_type == 0:  # mass
+            self.__grids[0].connectors[connector_id].primary_variable[1] = \
+                self.__grids[0].connectors[connector_id].primary_variable[0] + sum_flux * timemarching.stepsize
+        else:  # momentum
+            self.__grids[0].connectors[connector_id].primary_variable[1] = \
+                (self.__grids[0].connectors[connector_id].primary_variable[0] *
+                 self.__grids[0].assign_centered_primary_variable(connector_id, 0) + sum_flux * timemarching.stepsize) \
+                / self.__grids[0].assign_centered_primary_variable(connector_id, 1)
 
-        if ( self.balanceType == 1 ): # momentum          
-                                                                                            # NO JUNCTION
-            self.grid0.yNodes[nodeNumber].primaryVariable[1] =  self.grid0.yNodes[nodeNumber].primaryVariable[1] + yOptions.gravity * ( self.grid1.yNodes[self.grid0.yNodes[nodeNumber].upwindNodesNumber[0]].primaryVariable[1] + self.grid1.yNodes[self.grid0.yNodes[nodeNumber].upwindNodesNumber[0]].geometry - self.grid1.yNodes[self.grid0.yNodes[nodeNumber].downwindNodesNumber[0]].primaryVariable[1] - self.grid1.yNodes[self.grid0.yNodes[nodeNumber].downwindNodesNumber[0]].geometry ) * yTimeStepping.dt / ( self.grid0.yNodes[nodeNumber].dx )   
-            #self.grid0.yNodes[nodeNumber].primaryVariable[1] = self.grid0.yNodes[nodeNumber].primaryVariable[1] + yOptions.gravity * ( self.grid1.yNodes[self.grid0.yNodes[nodeNumber].upwindNodesNumber[0]].primaryVariable[1]  - self.grid1.yNodes[self.grid0.yNodes[nodeNumber].downwindNodesNumber[0]].primaryVariable[1] ) * self.yTimeStepping.dt / ( self.grid0.yNodes[nodeNumber].dx * self.grid0.yNodes[nodeNumber].dx ) 
-        
-               
-#####################################################################################  
+    def do_pressure_step(self, connector_id, timemarching):
+        if self.__balance_type == 1:  # momentum
+            self.__grids[0].connectors[connector_id].primary_variable[1] += \
+                gravity * (self.__grids[1].connectors[self.__grids[0].connectors[
+                    connector_id].immediate_connectors_id[0][0]].primary_variable[1] +
+                           self.__grids[1].connectors[self.__grids[0].connectors[
+                               connector_id].immediate_connectors_id[0][0]].geometry -
+                           self.__grids[1].connectors[self.__grids[0].connectors[
+                                connector_id].immediate_connectors_id[1][0]].primary_variable[1] -
+                           self.__grids[1].connectors[self.__grids[0].connectors[
+                                connector_id].immediate_connectors_id[1][0]].geometry) * \
+                timemarching.stepsize / self.__grids[0].connectors[connector_id].length
 
-
-    def incorporateSourceTerms ( self, nodeNumber, yTimeStepping ):            
-    
-    
-        if ( self.balanceType == 0): # mass
-           
-            self.grid0.yNodes[nodeNumber].primaryVariable[1] = self.grid0.yNodes[nodeNumber].primaryVariable[1] + self.grid0.yNodes[nodeNumber].sourceTerm * yTimeStepping.dt
-        
-        else: # momentum
-            
+    def assign_source_terms(self, connector_id, timemarching):
+        if self.__balance_type == 0:  # mass
+            self.__grids[0].connectors[connector_id].primary_variable[1] += \
+                self.__grids[0].connectors[connector_id].source_term * timemarching.stepsize
+        else:  # momentum
             pass
-            #self.grid0.yNodes[nodeNumber].primaryVariable[1] = self.grid0.yNodes[nodeNumber].primaryVariable[1] - yOptions.gravity * pow ( self.grid0.yNodes[nodeNumber].primaryVariable[1], 2.) / ( pow ( self.grid0.yNodes[nodeNumber].conductance, 2. ) * pow ( network.partnerGridPrimaryVariableCenteredNew ( nodeNumber, self.grid0, self.grid1 ), 1.33333 )  )
-   
-                                                                                                                                 
-#####################################################################################                
-
-                                                 

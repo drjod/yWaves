@@ -11,7 +11,7 @@ The following figure shows results of the dam break problem:
 
 ##Get yWaves run
 Requirements are Python and Matplotlib. Latter to get simulation results into plots, which are dynamically updated in runtime. 
-I used the Anaconda Python distribution. This contains everything needed and runs on Windows 7 with 64 bit. 
+I used the Anaconda Python distribution. This contains everything needed.
 The yWaves source code can be imported as
 ```python
 import sys
@@ -22,7 +22,7 @@ To start a simulation, type then
 ```python
 yWaves.run("inputFile")
 ```
-Make sure you set the paths correctly (you may need \\\ inststead \\ on Windows).
+Make sure you set the paths correctly (you may need \\\ instead \\ on Windows).
 ##Input files
 A number of example input files are in the repository and cover various aspects of the code
 

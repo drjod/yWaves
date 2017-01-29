@@ -1,299 +1,131 @@
-####################################################################################
-#
-# yWaves class yOutput by JOD
-#
-# dynamically updated graphs - plotResults()
-# or numbers on shell - writeResults()
-# supports time series and profiles 
-#
-####################################################################################
-
-
-import yNetwork
-import ySimulator
 import math
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 
 
-####################################################################################
+class yOutput:
+    """
+    dynamically updated graphs - plot_results()
+    or _ids on shell - write_results()
+    supports time series and profiles 
+    """
 
-
-class yOutputClass:
-   
-
-    number = -1
-    gridNumber         = -1
-    nodesNumber        = []
-    variables          = []
-    seriesTimes        = []
-    seriesValues       = []
-    
-    
-    def __init__ ( self, number, gridNumber, nodesNumber, variables, seriesTimes, seriesValues ):
-  
-        
-        self.number = number
-        self.gridNumber = gridNumber
-        self.nodesNumber = nodesNumber
-        self.variables = variables
-        self.seriesTimes = seriesTimes
-        self.seriesValues = seriesValues
+    def __init__(self, _id, grid_id, connectors_id, variables, seriesTimes, seriesValues):
+        self.__id = _id
+        self.__grid_id = grid_id
+        self.__connectors_id = connectors_id
+        self.__variables = variables
+        self.series_times = seriesTimes
+        self.series_values = seriesValues
                
         plt.ion()
-        plt.figure ( 1 ) 
-        
-        
-######################################################################################  
 
+    @property
+    def connectors_id(self):
+        return self.__connectors_id
 
-    def plotProfiles ( self, net, stp, gs ):  
-      
-        
-         plt.subplot ( gs[self.number, 0] )
-            
-         if ( self.number == 0 ):
-         
-             plt.title ( "Simulation time: " + str ( stp.current ) + " s" )        
+    def plot_profiles(self, network, timemarching, gs):
+        plt.subplot(gs[self.__id, 0])
+        if self.__id == 0:
+            plt.title("Simulation time: {} s".format(timemarching.current))
                   
-         if ( self.gridNumber == 0 ):
-            
-             plt.xlabel ( "Node number" )
-            
-         elif ( self.gridNumber == 1 ):   
-         
-             plt.xlabel ( "Link number" ) 
-                
-         else:
-            
-             print ("Error in plot Results: Grid not known") 
-                  
-                
-         for i in range ( 0, len ( self.variables ), 1 ): 
-            
-             values = []
-             plt.ylabel ( self.variables[i] )        
-                
-             for ii in range ( 0, len ( self.nodesNumber ), 1 ):
-                   
-                   values.append ( net.yGrids[self.gridNumber].yNodes[self.nodesNumber[ii]].getValue ( self.variables[i] ) )
-                                     
-             lineColor = selectLineColor ( self.variables[i] )
-             plt.plot( self.nodesNumber, values, color = lineColor, linewidth=2.5, linestyle="-" )
-             
-             
-######################################################################################  
-
-
-    def plotTimeSeries ( self, net, stp, gs ):  
-        
-          
-        plt.subplot ( gs[self.number, 0] )
-        
-        plt.xlabel ( "Time" )
-        
-        if ( self.gridNumber == 0 ):
-        
-            plt.title ( "Node " + str ( self.nodesNumber[0] ) )  
-        
+        if self.__grid_id == 0:
+            plt.xlabel("Node id")
+        elif self.__grid_id == 1:
+            plt.xlabel("Link id")
         else:
-        
-            plt.title ( "Link " + str ( self.nodesNumber[0] ) )  
-         
-         
-        self.seriesTimes.append ( stp.current )
-        
-        
-        for i in range ( 0, len ( self.variables ), 1 ): 
-        
-            self.seriesValues.append ( net.yGrids[self.gridNumber].yNodes[self.nodesNumber[0]].getValue ( self.variables[i] ) )
-                       
-            outputValues = []
-            
-            for j in range ( 0, len (self.seriesValues ), 1 ):     
-            
-                if ( math.fmod ( j , len ( self.variables ) ) == i ): 
+            print("Error in plot Results: Grid not known")
 
-                    outputValues.append ( self.seriesValues[j] )
+        for i in range(len(self.__variables)):
+            values = []
+            plt.ylabel(self.__variables[i])
+            for ii in range(len(self.__connectors_id)):
+                values.append(network.grids[self.__grid_id].connectors[self.__connectors_id[ii]].get_variable_value(
+                    self.__variables[i]))
+                                     
+            linecolor = select_linecolor(self.__variables[i])
+            plt.plot(self.__connectors_id, values, color=linecolor, linewidth=2.5, linestyle="-")
+
+    def plot_timeseries(self, network, timemarching, gs):
+        plt.subplot(gs[self.__id, 0])
+        plt.xlabel("Time")
+        
+        if self.__grid_id == 0:
+            plt.title("Node " + str(self.__connectors_id[0]))
+        else:
+            plt.title("Link " + str(self.__connectors_id[0]))  
+
+        self.series_times.append(timemarching.current)
+
+        for i in range(len(self.__variables)):
+            self.series_values.append(
+                network.grids[self.__grid_id].connectors[self.__connectors_id[0]].get_variable_value(
+                    self.__variables[i]))
+            output_values = list()
+
+            for j in range(0, len(self.series_values), 1):
+                if math.fmod(j, len(self.__variables)) == i:
+                    output_values.append(self.series_values[j])
                                     
-            plt.ylabel ( self.variables[i] )
-            lineColor = selectLineColor ( self.variables[i] )
-            plt.plot ( self.seriesTimes, outputValues, color = lineColor, linewidth=2.5, linestyle="-" )
-                             
-            
-######################################################################################  
-#
-# global functions
-#    
-	
-def plotResults ( outputs, net, stp ):  
+            plt.ylabel(self.__variables[i])
+            linecolor = select_linecolor(self.__variables[i])
+            plt.plot(self.series_times, output_values, color=linecolor, linewidth=2.5, linestyle="-")
+
+
+def plot_results(outputs, network, timemarching):
     
-    gs = gridspec.GridSpec ( len ( outputs ), 1 )
-    gs.update( left = .18, right=.95 , hspace = 1. )
+    gs = gridspec.GridSpec(len(outputs), 1)
+    gs.update(left=.18, right=.95, hspace=1.)
   
-    for i in range (0, len ( outputs ), 1):
-            
-        if ( len ( outputs[i].nodesNumber ) != 1 ):
-        
-            outputs[i].plotProfiles ( net, stp, gs )
-                
-        else:    
-              
-            outputs[i].plotTimeSeries ( net, stp, gs )    
-            
-            
-            
-    plt.draw ()
+    for i in range(len(outputs)):
+        if len(outputs[i].connectors_id) != 1:
+            outputs[i].plot_profiles(network, timemarching, gs)
+        else:
+            outputs[i].plot_timeseries(network, timemarching, gs)
+
+    # plt.draw()
+    plt.show()
+    if timemarching.step > 0:
+        input('Press any key')
+        plt.clf()
     
-    #if ( stp.step > 0 ) :
-    #
-    #    plt.clf () 
-    
-    if ( stp.current >= stp.end ) :
-    
-        raw_input( "Simulation finished" )   
+    if timemarching.current >= timemarching.end:
+        input("Simulation finished")
          
-                     
-######################################################################################  
-#
-# screen output
 
-def writeResults (yNetwork, stp ):  
-      
-    print ( "Simulation time: " + str ( stp.current ) )
-    print ( "Water depths:" )
+def write_results(network, timemarching):
+    """
+    screen output
+    :param network: (class yNetwork)
+    :param timemarching: (class yTimestepping)
+    :return:
+    """
+    print("Simulation time: {}".format(timemarching.current))
+    print("Water depths:")
        
-    for i in range ( 0, len ( yNetwork.yGrids[0].yNodes ), 1 ):
+    for i in range(len(network.grids[0].connectors)):
+        if network.grids[0].connectors[i].ghost == 0:
+            print("{}: {}".format(i, network.grids[0].connectors[i].primary_variable[1]))
     
-        if ( yNetwork.yGrids[0].yNodes[i].ghost == 0 ):
-    
-            print ( str (i) + ": " + str ( yNetwork.yGrids[0].yNodes[i].primaryVariable[1] ) )
-    
-    print ( "Velocities:" )    
-        
-    for j in range ( 0, len ( yNetwork.yGrids[1].yNodes ), 1 ):
-    
-        if ( yNetwork.yGrids[1].yNodes[j].ghost == 0 ):
-       
-            print ( str (j) + ": " + str ( yNetwork.yGrids[1].yNodes[j].primaryVariable[1] ) )  
-                          
-    
-    print ( "Flow rates:" )    
-        
-    for j in range ( 0, len ( yNetwork.yGrids[1].yNodes ), 1 ):
-    
-        if ( yNetwork.yGrids[1].yNodes[j].ghost == 0 ):
-       
-            print ( str (j) + ": " + str ( yNetwork.yGrids[0].yNodes[j].primaryVariable[1] *  \
-            0.5 * ( yNetwork.yGrids[1].yNodes[yNetwork.yGrids[0].yNodes[j].upwindNodesNumber[0]].primaryVariable[1] + \
-            yNetwork.yGrids[1].yNodes[yNetwork.yGrids[0].yNodes[j].downwindNodesNumber[0]].primaryVariable[1] ) ) )            
-           
-           
-    plt.close()        
-    
-        
-######################################################################################             
- 
+    print("Velocities:")    
+    for j in range(len(network.grids[1].connectors)):
+        if network.grids[1].connectors[j].ghost == 0:
+            print("{}: {}".format(j, network.grids[0].connectors[j].primary_variable[1]))
 
-def selectLineColor ( variable ):
 
-    
-    if ( variable == "waterDepth" ):
-    
-        return str ( "blue" )
-    
-    if (variable == "velocity" ):
-               
-        return str ( "red" )    
-                   
-    elif  ( variable == "flux" ):
-               
-        return  str ( "green" )
-            
-    elif  ( variable == "froudeNumber" ):
-               
-        return  str ( "orange" )
-                          
-    else:
-               
-        print ( "Error in selectLineColor: Variable not known" )  
-    
- 
-    #if ( number > 5):   
-    # 
-    #    print ( "Warning in plotResults: Number of colors restricted to 6" )
-    #    
-    #    
-    #    
-    #if ( number == 0 ):
-    #            
-    #    return str ( "blue" )    
-    #       
-    #elif ( number == 1 ):
-    #   
-    #    return str ( "red" )
-    #        
-    #elif ( number == 2 ):
-    #   
-    #    return str ( "green" )
-    #    
-    #elif ( number == 3 ):
-    #   
-    #    return str ( "orange" )
-    #    
-    #elif ( number == 4 ):
-    #   
-    #    return str ( "pink" )
-    #        
-    #else:          
-    #   
-    #    return str ( "yellow" )
-    #    
+def select_linecolor(variable):
+    """
 
-###################################################################################### 
-#
-# e.g. for DEBUG
-                                              
-def printGrid ( yNetwork ):
-      
-        print ( "############### yGrids[0] #####" )  
-                
-        for i in range (0, len ( yNetwork.yGrids[0].yNodes ), 1 ): 
-        
-            print ( "Number:            " + str ( yNetwork.yGrids[0].yNodes[i].number ) )
-            #print ( "Geometry (Elev):   " + str ( yNetwork.yGrids[0].yNodes[i].geometry ) )   
-            #print ( "dx (Length):       " + str ( yNetwork.yGrids[0].yNodes[i].dx )  )    
-            #print ( "Ghost:             " + str ( yNetwork.yGrids[0].yNodes[i].ghost )  )   
-            #print ( "Boundary cond:     " + str ( yNetwork.yGrids[0].yNodes[i].boundaryCondition )  )          
-        
-                                                                                                                                                 
-            for j in range ( 0, len ( yNetwork.yGrids[0].yNodes[i].upwindNodesNumber ), 1 ):         
-                                                                                                  
-                print ( "up: " + str ( yNetwork.yGrids[0].yNodes[i].upwindNodesNumber[j] ) )         
-                                                                                                  
-            for j in range ( 0, len ( yNetwork.yGrids[0].yNodes[i].downwindNodesNumber ), 1 ):       
-                                                                                                  
-                print ( "down: " + str ( yNetwork.yGrids[0].yNodes[i].downwindNodesNumber[j] ) )     
-            
-        
-        print ( "############### yGrids[1] #####" )  
-        for i in range (0, len ( yNetwork.yGrids[1].yNodes ), 1 ): 
-                                                              
-            print ( "Number:             "  + str ( yNetwork.yGrids[1].yNodes[i].number ) )           
-            #print ( "Geometry (Slope):   "  + str ( yNetwork.yGrids[1].yNodes[i].geometry ) )  
-            #print ( "dx (Length):        "  + str ( yNetwork.yGrids[1].yNodes[i].dx ) )  
-            #print ( "LawNumber:          "  + str ( yNetwork.yGrids[1].yNodes[i].lawNumber ) )             
-            #print ( "Ghost:              "  + str ( yNetwork.yGrids[1].yNodes[i].ghost ) )  
-    
-            
-            for j in range ( 0, len ( yNetwork.yGrids[1].yNodes[i].upwindNodesNumber ), 1 ): 
-                
-                print ( "up: " + str ( yNetwork.yGrids[1].yNodes[i].upwindNodesNumber[j] ) )
-            
-            for j in range ( 0, len ( yNetwork.yGrids[1].yNodes[i].downwindNodesNumber ), 1 ): 
-                
-                print ( "down: " + str ( yNetwork.yGrids[1].yNodes[i].downwindNodesNumber[j] ) ) 
-        
-
-######################################################################################  
-  
+    :param variable: (string)
+    :return:
+    """
+    if variable == "waterDepth":
+        return str("blue")
+    elif variable == "velocity":
+        return str("red")               
+    elif variable == "flux":
+        return str("green")
+    elif variable == "froudeNumber":
+        return str("orange")
+    else:   
+        print("Error in select_linecolor: Variable not known")  

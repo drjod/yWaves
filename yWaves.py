@@ -1,29 +1,17 @@
-####################################################################################
-#
-# yWaves by Jens-Olaf Delfs (JOD)
-#
-####################################################################################
+from ySimulator import ySimulator
 
 
-import ySimulator
-    
+def run(*args):
+    """
+    main function
+    :param *args: either input file (string) or empty
+    :return:
+    """
+    input_file = args[0] if len(args) else input('Input file: ')
 
-#####################################################################################
-#
-# yWaves main function
-# generates one single instance of ySimulatorClass
-# so it generates one single wave, which is specified in an input file
-#
+    wave = ySimulator(input_file)
+    wave.run()
 
 
-def run ( inputFile ):
-    
-
-    yWave = ySimulator.ySimulatorClass ( inputFile ) 
-
-    yWave.run ()    
-     
-    del yWave
-    
-     
-#####################################################################################
+if __name__== '__main__':
+    run()

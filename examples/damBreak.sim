@@ -1,8 +1,8 @@
 OPTIONS
 1                  Calculate momentum ? 0: No, 1: Yes (Saint-Venant equation)                                    
-4                  0: upwind, 1: LaxWendroff, 2: BeamWarming, 3: Fromm, 4: VanLeer, 5: minmod                    
+4                  0: upwind, 1: LaxWendroff, 2: BeamWarming, 3: Fromm, 4: VanLeer, 5: minmod
 0.0 2.5 0.05       time start, end, dt                                                                            
-0 0.0 0.0 0.0      time step mode (0: constant time stepping, 1: adaptive), savety factor, factor_min, factor_max
+0 0.0 0.0 0.0      time step mode (0: constant time stepping, 1: adaptive), safety factor, factor_min, factor_max
 
 
 NODES              
@@ -112,7 +112,6 @@ LINKS
 47                   47    48     1.       -1                  1.e-10              0        NO
 48                   48    49     1.       -1                  1.e-10              0        NO
 49                   49    50     1.       -1                  1.e-10              0        NO
-
 
 
 OUTPUTS

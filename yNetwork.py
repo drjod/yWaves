@@ -1,261 +1,119 @@
-##############################################################
-#
-# yWaves class yNetwork by JOD
-#
-##############################################################
+from yGrid import yGrid
+from yMathematics import average, invert
+from math import sqrt
+from copy import deepcopy
+from yOptions import averaging, gravity, epsilon
 
 
-import yGrid
-import yNode
-import yMathematics
-import yOptions
-import yLaws
-import copy
-import math
+class yNetwork:
+    """
+    hosts grid and partner grid
+    """
+    def __init__(self):
+        self.__grids = [yGrid(0),  # connectors
+                        yGrid(1)]  # links
 
+        self.__grids[0].partnergrid = self.__grids[1]   # each grid has partner grid
+        self.__grids[1].partnergrid = self.__grids[0]
 
+    @property
+    def grids(self):
+        return self.__grids
 
-##############################################################
-#
-# hosts grid and partner grid 
-#
+    def construct(self):
+        """
+        complete network after having nodes and links from input files
+        :return:
+        """
+        self.connect_connectors_to_links()
+        self.add_connector_ghosts()
+        self.assign_length_to_connectors()
+        self.assign_source_terms_from_link_to_connectors()
 
-class yNetworkClass:
+    def connect_connectors_to_links(self):
+        """
+        assign to connectors hosted on grids[0] all connected links from grids[1]
+        :return:
+        """
+        for i in range(len(self.__grids[1].connectors)):
+            for k in [0,1]:  # 0: upwind, 1: downwind
+                for j in range(len(self.__grids[1].connectors[i].immediate_connectors_id[k])):
+                    self.__grids[0].connectors[
+                        self.__grids[1].connectors[i].immediate_connectors_id[k][j]].immediate_connectors_id[
+                        invert(k)].append(self.__grids[1].connectors[i].id)
 
+    def add_connector_ghosts(self):
+        """
+        for 1D domain boundaries
+        :return:
+        """
+        for i in [1,0]:  # 1: links, 0: connectors
+            for j in range(len(self.__grids[invert(i)].connectors)):
+                for k in [0,1]:  # 0; upwind, 1; downwind
+                    if not self.__grids[invert(i)].connectors[j].immediate_connectors_id[k]:  # no upwindLinks
+                        # new link is downwind link of a connector
+                        self.__grids[invert(i)].connectors[j].immediate_connectors_id[k].append(
+                            len(self.__grids[i].connectors))
+                        connector = deepcopy(
+                            self.__grids[i].connectors[
+                                self.__grids[invert(i)].connectors[j].immediate_connectors_id[invert(k)][0]])
 
-    yGrids = []
+                        connector.immediate_connectors_id = [[], []]  # delete elements
+                        connector.id = len(self.__grids[i].connectors)
+                        connector.immediate_connectors_id[invert(k)].append(self.__grids[invert(i)].connectors[j].id)
+                        connector.ghost = 1
+                        if i:  # only for links
+                            connector.geometry += self.__grids[1].connectors[j].geometry * \
+                                                  self.__grids[1].connectors[j].length
+                        self.__grids[i].connectors.append(connector)
+
+    def assign_length_to_connectors(self):
+        """
+        length of links is specified in input file
+        here, these lengths are transfered to the connectors.
+        :return:
+        """
+        for i in range(0, len(self.__grids[0].connectors), 1):
+            lengths = [[], []]  # 0: upwind, 1: downwind(
+
+            for k in [0, 1]:  # 0; upwind, 1; downwind
+                    for j in range(len(self.__grids[0].connectors[i].immediate_connectors_id[k])):
+                        lengths[k].append(self.__grids[1].connectors[
+                                             self.__grids[0].connectors[i].immediate_connectors_id[k][j]].length)
+
+            self.__grids[0].connectors[i].length = average(lengths, averaging)
+
+    def assign_source_terms_from_link_to_connectors(self):
+        """
+        multiply source term on link with length and assign to connector
+        mass source /sink terms(e.g. for precipitation, infiltration) are assigned to connectors in input file
+        while momentum source / sink terms are assigned to links
+        here, source / sink terms are transfered from links to connectors
+        :return:
+        """
+        for i in range(len(self.__grids[0].connectors)):
+            for k in [0, 1]:  # 0; upwind, 1; downwind
+                for j in range(len(self.__grids[0].connectors[i].immediate_connectors_id[k])):
+                    self.__grids[0].connectors[i].source_term += \
+                        self.__grids[1].connectors[
+                            self.__grids[0].connectors[i].immediate_connectors_id[k][j]].source_term * \
+                        self.__grids[1].connectors[self.__grids[0].connectors[i].immediate_connectors_id[k][j]].length
+
+    def assign_froude_number(self):
+        """
+        for output
+        :return:
+        """
+        froude_number_max = 0.
     
-   
-    def __init__ ( self, yGrids ):
-
-      
-        self.yGrids = yGrids
-        
-        self.yGrids[0].partnerGrid = self.yGrids[1]     # each grid has partner grid
-        self.yGrids[1].partnerGrid = self.yGrids[0]     
-                    
-
-##############################################################   
-
-
-    def construct ( self ):
-
-                  
-        # self.grids[0].incorporateBoundaryConditions ()
-        # self.grids[1].incorporateBoundaryConditions ()      
-        
-        self.connectNodes2Links ()
-                  
-        self.addGhostLinks ()    
-                
-        self.addGhostNodes ()
-          
-        self.assignDx2Nodes ()                     
-                
-        self.assignLinkSourceTerms2Nodes ()
-                     
-                          
-##############################################################
-#
-# append on nodes hosted by yGrids[0] all existing links (according to input file)
-# yGrids[1] hosts links.
-# This is decided by ySimulator prae()
-#                         
-                                              
-    def connectNodes2Links ( self ):
-    
-           
-        for i in range (0, len ( self.yGrids[1].yNodes ), 1 ):
-        
-            for j in range ( 0, len ( self.yGrids[1].yNodes[i].upwindNodesNumber ), 1 ): 
+        for j in range(len(self.__grids[1].connectors)):
+            if self.__grids[1].connectors[j].ghost == 0:
+                self.__grids[1].connectors[j].froude_number = self.__grids[1].connectors[j].primary_variable[1] / \
+                sqrt(gravity * 0.5 * max(epsilon, abs(
+                    self.__grids[0].connectors[
+                        self.__grids[1].connectors[j].immediate_connectors_id[0][0]].primary_variable[1] +
+                    self.__grids[0].connectors[
+                        self.__grids[1].connectors[j].immediate_connectors_id[1][0]].primary_variable[1])))
+                froude_number_max = max(froude_number_max, self.__grids[1].connectors[j].froude_number)
             
-                self.yGrids[0].yNodes[self.yGrids[1].yNodes[i].upwindNodesNumber[j]].downwindNodesNumber.append ( self.yGrids[1].yNodes[i].number )
-            
-            for j in range ( 0, len ( self.yGrids[1].yNodes[i].downwindNodesNumber ), 1 ): 
-            
-                self.yGrids[0].yNodes[self.yGrids[1].yNodes[i].downwindNodesNumber[j]].upwindNodesNumber.append ( self.yGrids[1].yNodes[i].number )
-
-
-############################################################## 
-#
-# for 1D domain boundaries
-#
-
-    def addGhostLinks ( self ):    
-                
-                        
-        for i in range (0, len ( self.yGrids[0].yNodes ), 1 ):            
-             
-            if ( len ( self.yGrids[0].yNodes[i].upwindNodesNumber ) == 0 ): # no upwindLinks
-        
-                self.yGrids[0].yNodes[i].upwindNodesNumber. append ( len ( self.yGrids[1].yNodes ) ) # new link is downwind link of a node      
-                nodeNew = copy.deepcopy ( self.yGrids[1].yNodes[self.yGrids[0].yNodes[i].downwindNodesNumber[0]] )    
-                            
-                while ( len ( nodeNew.upwindNodesNumber ) > 0 ):
-                
-                    del nodeNew.upwindNodesNumber[len ( nodeNew.upwindNodesNumber ) - 1]
-                    
-                while ( len ( nodeNew.downwindNodesNumber ) > 0 ):
-                
-                    del nodeNew.downwindNodesNumber[len ( nodeNew.downwindNodesNumber ) - 1]
-                    
-                nodeNew.downwindNodesNumber.append ( self.yGrids[0].yNodes[i].number )
-                nodeNew.ghost = 1  
-                nodeNew.number = len ( self.yGrids[1].yNodes )   
-                                                      
-                self.yGrids[1].yNodes.append ( nodeNew )
-                                   
-             
-            if ( len ( self.yGrids[0].yNodes[i].downwindNodesNumber ) == 0 ): # no downwindLinks
-        
-                self.yGrids[0].yNodes[i].downwindNodesNumber. append ( len ( self.yGrids[1].yNodes ) ) # new link is downwind link of a node      
-                nodeNew = copy.deepcopy ( self.yGrids[1].yNodes[self.yGrids[0].yNodes[i].upwindNodesNumber[0]] )  
-                              
-                while ( len ( nodeNew.downwindNodesNumber ) > 0 ):
-                
-                    del nodeNew.downwindNodesNumber[len ( nodeNew.downwindNodesNumber ) - 1]
-                    
-                while ( len ( nodeNew.upwindNodesNumber ) > 0 ):
-                
-                    del nodeNew.upwindNodesNumber[len ( nodeNew.upwindNodesNumber ) - 1]
-                    
-                nodeNew.upwindNodesNumber.append ( self.yGrids[0].yNodes[i].number )
-                nodeNew.ghost = 1            
-                nodeNew.number = len ( self.yGrids[1].yNodes )   
-                       
-                self.yGrids[1].yNodes.append ( nodeNew )      
-                
-                
-############################################################## 
-#
-# for 1D domain boundaries
-#
-
-
-    def addGhostNodes ( self ):  
-                                           
-
-        for j in range (0, len ( self.yGrids[1].yNodes ), 1 ):            
-             
-            if ( len ( self.yGrids[1].yNodes[j].upwindNodesNumber ) == 0 ): # no upwindNodes
-        
-             
-                self.yGrids[1].yNodes[j].upwindNodesNumber.append ( len ( self.yGrids[0].yNodes ) )
-                #                                    new node is upwind node of a ghost link                  1: ghost node
-                nodeNew = copy.deepcopy ( self.yGrids[0].yNodes[self.yGrids[1].yNodes[j].downwindNodesNumber[0]] )
-                while ( len ( nodeNew.upwindNodesNumber ) > 0 ):
-                
-                    del nodeNew.upwindNodesNumber[len ( nodeNew.upwindNodesNumber ) - 1]
-                    
-                while ( len ( nodeNew.downwindNodesNumber ) > 0 ):
-                
-                    del nodeNew.downwindNodesNumber[len ( nodeNew.downwindNodesNumber ) - 1]
-                    
-                nodeNew.number = len ( self.yGrids[0].yNodes )         
-                nodeNew.downwindNodesNumber.append ( self.yGrids[1].yNodes[j].number )
-                nodeNew.ghost = 1                                               # NO JUNCTION                  
-                nodeNew.geometry = nodeNew.geometry + self.yGrids[1].yNodes[j].geometry  * self.yGrids[1].yNodes[j].dx
-                self.yGrids[0].yNodes.append ( nodeNew )  
-                    
-            
-            if ( len ( self.yGrids[1].yNodes[j].downwindNodesNumber ) == 0 ): # no downwindNodes
-        
-   
-                self.yGrids[1].yNodes[j].downwindNodesNumber.append ( len ( self.yGrids[0].yNodes ) ) 
-                #                                        new node is downwind node of a ghost link            1: ghost node 
-                nodeNew = copy.deepcopy ( self.yGrids[0].yNodes[self.yGrids[1].yNodes[j].upwindNodesNumber[0]] )
-                
-                while ( len ( nodeNew.upwindNodesNumber ) > 0 ):
-                
-                    del nodeNew.upwindNodesNumber[len ( nodeNew.upwindNodesNumber ) - 1]
-                    
-                while ( len ( nodeNew.downwindNodesNumber ) > 0 ):
-                
-                    del nodeNew.downwindNodesNumber[len ( nodeNew.downwindNodesNumber ) - 1]
-                    
-                nodeNew.number = len ( self.yGrids[0].yNodes )           
-                nodeNew.upwindNodesNumber.append ( self.yGrids[1].yNodes[j].number )
-                nodeNew.ghost = 1                                                  # NO JUNCTION                
-                nodeNew.geometry = nodeNew.geometry - self.yGrids[1].yNodes[j].geometry  * self.yGrids[1].yNodes[j].dx        
-                self.yGrids[0].yNodes.append ( nodeNew )  
-                    
-                
-############################################################## 
-#
-# length of links is specified in input file
-# here, these lengths are transfered to the nodes.
-#
-
-    def assignDx2Nodes ( self ):                     
-                          
-               
-        avg = yMathematics.average
-        
-        for i in range (0, len ( self.yGrids[0].yNodes ), 1 ):   
-        
-            dx_up = []
-            dx_down = []
-            
-            for j in range (0, len ( self.yGrids[0].yNodes[i].upwindNodesNumber ), 1 ): 
-            
-                dx_up.append ( self.yGrids[1].yNodes[self.yGrids[0].yNodes[i].upwindNodesNumber[j]].dx ) 
-                
-            for j in range (0, len ( self.yGrids[0].yNodes[i].downwindNodesNumber ), 1 ):     
-                                                                                          
-                dx_down.append ( self.yGrids[1].yNodes[self.yGrids[0].yNodes[i].downwindNodesNumber[j]].dx )                
-                
-        
-            self.yGrids[0].yNodes[i].dx = avg ( [avg ( dx_up, 0 ), avg ( dx_down, 0 )], 0 )   
-            
-            
-############################################################## 
-#
-# mass source /sink terms (e.g. for precipitation, infiltration) are assigned to nodes in input file
-# while momentum source / sink terms are assigned to links
-# here, source / sink terms are transfered from links to nodes 
-#
-
-
-    def assignLinkSourceTerms2Nodes ( self ):   # multiply source term on link with dx and assign to node
-    
-                       
-        for i in range (0, len ( self.yGrids[0].yNodes ), 1 ):   
-        
-            dx_up = []                         
-            dx_down = []
-        
-            for j in range (0, len ( self.yGrids[0].yNodes[i].upwindNodesNumber ), 1 ): 
-            
-                self.yGrids[0].yNodes[i].sourceTerm =  self.yGrids[0].yNodes[i].sourceTerm + self.yGrids[1].yNodes[self.yGrids[0].yNodes[i].upwindNodesNumber[j]].sourceTerm * self.yGrids[1].yNodes[self.yGrids[0].yNodes[i].upwindNodesNumber[j]].dx
-               
-            for j in range (0, len ( self.yGrids[0].yNodes[i].downwindNodesNumber ), 1 ):     
-                                                                                          
-                self.yGrids[0].yNodes[i].sourceTerm =  self.yGrids[0].yNodes[i].sourceTerm + self.yGrids[1].yNodes[self.yGrids[0].yNodes[i].downwindNodesNumber[j]].sourceTerm * self.yGrids[1].yNodes[self.yGrids[0].yNodes[i].downwindNodesNumber[j]].dx
-                
-                
-##############################################################
-#
-# for output
-#
-
-
-    def assignFroudeNumber ( self ):
-  
-    
-        froudeNumberMax = 0.
-    
-        for j in range ( 0, len ( self.yGrids[1].yNodes ), 1 ):   
-    
-            if ( self.yGrids[1].yNodes[j].ghost == 0 ):
-                
-                self.yGrids[1].yNodes[j].froudeNumber =  self.yGrids[1].yNodes[j].primaryVariable[1] / \
-                math.sqrt ( yOptions.gravity * 0.5 *   \
-                max( yOptions.epsilon,  abs ( self.yGrids[0].yNodes[self.yGrids[1].yNodes[j].upwindNodesNumber[0]].primaryVariable[1] + \
-                self.yGrids[0].yNodes[self.yGrids[1].yNodes[j].downwindNodesNumber[0]].primaryVariable[1] ) ) )
-                froudeNumberMax = max ( froudeNumberMax, self.yGrids[1].yNodes[j].froudeNumber )
-            
-        print ( "  Maximum Froude number: " + str ( froudeNumberMax ) + "\n" )    
-        
-                        
-##############################################################
-      
+        print("  Maximum Froude number: {}\n".format(froude_number_max))

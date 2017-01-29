@@ -1,179 +1,72 @@
-####################################################################################
-#
-# yWaves class ySimulator by JOD
-#
-####################################################################################
+from yBalance import yBalance
+from yRead import read_inputfile
+from yOutput import plot_results, write_results
+from yOptions import epsilon
 
 
-import yNetwork
-import yBalance
-import yGrid
-import yTimeStepping
-import yOptions
-import yNumerics
-import yRead 
-import yNode
-import yOutput
-import math
-import time    
-#import pdb; pdb.set_trace()  
+class ySimulator:
+    def __init__(self, filename):
+        self.__filename = filename
 
+        self.__balances = list()
+        self.__laws = list()
+        self.__outputs = list()
 
-####################################################################################
+        self.__network = None
+        self.__timemarching = None
+        self.__numerics = None
 
+    def run(self):
+        if self.do_prae_calculation():
+            return 1
+        self.do_calculation()
+        self.do_post_calculation()
+        return 0
 
-class ySimulatorClass:
+    def do_prae_calculation(self):
+        """
+        read input, construct network
+        states which grid hosts connectors(can be connected to many links)
+        and which grid hosts links(always connected to 2 connectors)
+        (via yNetwork connect_connectors_to_links() called by construct())
+        :return:
+        """
+        self.__numerics, self.__timemarching, self.__network, \
+            self.__laws, self.__outputs = read_inputfile(self.__filename)
 
+        if self.__numerics is None:
+            return 1  # error when tried opening input file
 
-    fileName = []
-        
-    yNetwork       = -1
-    yTimeStepping  = -1
-    yOptions       = -1
-    yNumerics      = -1
-    yBalances      = []
-    yLaws          = []  
-    yOutputs       = []
+        self.__balances.append(yBalance(self.__network, 0))  # mass
+        self.__balances.append(yBalance(self.__network, 1))  # momentum
 
-                                
-    def __init__ ( self, fileName ):
+        self.__network.construct()
 
-   
-        self.fileName = fileName 
-
-                    
-#####################################################################################    
-#
-# run simulation
-
-    def run ( self ):
-    
-       
-        self.prae ()
-        
-        self.execute ()    
-        
-        self.post ()
-    
-     
-#####################################################################################
-#
-# read input, construct network
-# states which grid hosts nodes (can be connected to many links) 
-# and which grid hosts links (always connected to 2 nodes)
-# (via yNetwork connectNodes2Links() called by construct())
-#
-
-    def prae ( self ):
-    
-       
-        nodes = []
-        links = []
-       
-             
-        nodesGrid = yGrid.yGridClass ( 0, nodes )   
-        linksGrid = yGrid.yGridClass ( 1, links )   
-               
-        self.yNetwork = yNetwork.yNetworkClass ( [nodesGrid, linksGrid] )
-        self.yTimeStepping = yTimeStepping.yTimeSteppingClass ( 0. ) 
-        self.yOptions = yOptions.yOptionsClass ()
-        self.yNumerics = yNumerics.yNumericsClass ()
-        
-        re = yRead.yReadClass ( self.fileName, self.yNetwork, self.yTimeStepping, self.yOptions, self.yNumerics, self.yLaws, self.yOutputs )
-        re.readFile ()
-       
-        mass = yBalance.yBalanceClass ( self.yNetwork, 0 )
-        momentum = yBalance.yBalanceClass ( self.yNetwork, 1 )
-        self.yBalances.append ( mass )
-        self.yBalances.append ( momentum )
-              
-        self.yNetwork.construct ()
-        update ( self.yNetwork, self.yTimeStepping )  
-        
-		# DEBUG
-        # yOutput.plotResults ( self.yOutputs, self.yNetwork, self.yTimeStepping ) 
-        # raw_input ( "Press key to execute time steps" )        
-        # yOutput.printGrid ( self.yNetwork )
-        
-        
-#####################################################################################
-#
-# advance through time steps        
-
-    def execute ( self):
-
-        while ( self.yTimeStepping.current < self.yTimeStepping.end - yOptions.epsilon ): 
-        
-            
-            print ( "#######################################################\n" ) 
-            print ( "Timestep: "  + str( self.yTimeStepping.step ) + "\n" ) 
-            
+    def do_calculation(self):
+        """
+        advance through time steps
+        :return:
+        """
+        while self.__timemarching.current < self.__timemarching.end - epsilon:
+            print("#######################################################\n")
+            print("Timestep: {}\n".format(self.__timemarching.step))
             # mass
-            self.yBalances[0].advanceTimeStep ( self.yTimeStepping, self.yLaws, self.yOptions, self.yNumerics )
-            
-          
-            if ( self.yOptions.momentum == 1 ):
-            
-                self.yBalances[1].advanceTimeStep ( self.yTimeStepping, self.yLaws, self.yOptions, self.yNumerics )
-            
-            update ( self.yNetwork, self.yTimeStepping )  
-                              
-             
-            #if ( math.fmod (stp.current, 10) == 0. ):
-                                                                                                            
-            yOutput.plotResults ( self.yOutputs, self.yNetwork, self.yTimeStepping ) 
-    
-            
-###################################################################################### 
-#
-# after calculation done
-           
-    def post ( self ):                                                      
-     
-    
-        # screen output stream
-        # yOutput.writeResults ( self.yNetwork, self.yTimeStepping ) 
-        
-        self.releaseMemory ()
-        
-        
-######################################################################################    
-#
-# finally         
+            self.__balances[0].advance_time_step(self.__timemarching, self.__laws, self.__numerics)
+            if self.__numerics.momentum_flac:
+                self.__balances[1].advance_time_step(self.__timemarching, self.__laws, self.__numerics)
+            self.update()
 
-    def releaseMemory ( self ):
+            write_results(self.__network, self.__timemarching)
+            plot_results(self.__outputs, self.__network, self.__timemarching)
 
+    def do_post_calculation(self):
+        pass
 
-        del self.fileName        
-        del self.yNetwork       
-        del self.yTimeStepping  
-        del self.yOptions   
-        
-             
-        while ( len ( self.yBalances ) > 0 ):
-        
-            del self.yBalances[len ( self.yBalances ) - 1]
-          
-              
-        while ( len ( self.yOutputs ) > 0 ):
-        
-            del self.yOutputs[len ( self.yOutputs ) - 1]
-            
+    def update(self):
 
-###################################################################################### 
-#
-# to proceed to next time step
+        self.__timemarching.maxVelocity = epsilon
 
-def update ( yNetwork, yTimeStepping ):            
-        
+        self.__network.grids[0].update_primary_variables()
+        self.__network.grids[1].update_primary_variables()
 
-        yTimeStepping.maxVelocity = yOptions.epsilon 
-    
-        yNetwork.yGrids[0].updatePrimaryVariables () 
-        yNetwork.yGrids[1].updatePrimaryVariables () 
-        
-        yNetwork.assignFroudeNumber () 
-
-                          
-######################################################################################   
-  
+        self.__network.assign_froude_number()

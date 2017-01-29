@@ -1,226 +1,139 @@
-####################################################################################
-#
-# yWaves class yNumerics by JOD
-#
-####################################################################################
+class yNumerics:
+    def __init__(self, method_id, momentum_flac):
+        self.__method_id = method_id
+        self.__momentum_flac = momentum_flac
+        # 0: upwind, 1: LaxWendroff, 2: BeamWarming, 3: Fromm, 4: VanLeer, 5: minmod
 
+    @property
+    def momentum_flac(self):
+        return self.__momentum_flac
 
-import yNetwork
-
-
-####################################################################################
-
-
-class yNumericsClass:                                                                                     
-                       
-    
-    methodNumber             = -1            # 0: upwind, 1: LaxWendroff, 2: BeamWarming,                                                                
-                                             # 3: Fromm, 4: VanLeer, 5: minmod            
-    
-    
-                                                                                                                                                                               
-    def __init__ ( self ):
-    
-    
-        pass    
-           
-
-##################################################################################### 
-        
-                                            
-    def assignVelocity ( self, grid0, grid1, nodeNumber, timeStepping, yLaws, momentum, balanceType ):           
-    
-        if ( balanceType == 0 ): # mass
-        
-            if ( momentum == 1 ):   # Saint-Venant
-            
-                pass    # velocity calculated in momentum balance
-              
-            else:
-                
-                grid1.yNodes[nodeNumber].primaryVariable[0] = grid1.yNodes[nodeNumber].primaryVariable[1] = \
-                yLaws[grid1.yNodes[nodeNumber].lawNumber].celerity ( grid1.yNodes[nodeNumber].geometry , grid1.primaryVariableCentered ( nodeNumber, 0 ) )   
-        
-                        # for timeStepping
-            if ( abs ( grid1.yNodes[nodeNumber].primaryVariable[0] / grid1.yNodes[nodeNumber].dx ) > timeStepping.maxVelocity ): 
-           
-                timeStepping.maxVelocity = abs ( grid1.yNodes[nodeNumber].primaryVariable[0] )
-           
-            
-        else:  # momentum
-        
-            grid1.yNodes[nodeNumber].velocityCentered = grid1.primaryVariableCentered ( nodeNumber, 0 )  # for flux
-                
-            
-#####################################################################################  
-
-
-    def provideFlux ( self, grid0, grid1, nodeNumber, yTimeStepping, balanceType ):
-    
-            
-        if ( balanceType == 0 ): # mass
-        
-            velocity = grid1.yNodes[nodeNumber].primaryVariable[0]
-                        
-             
-        else:  
-                
-            velocity = grid1.yNodes[nodeNumber].velocityCentered  # NO  JUNCTION  
-        
-                               
-        if ( velocity > 0 ): 
-                                                # NO JUNCTION
-            primVar_Adv = grid0.yNodes[ grid1.yNodes[nodeNumber].upwindNodesNumber[0]].primaryVariable[0] + \
-            0.5 * ( 1 - velocity * yTimeStepping.dt / grid1.yNodes[nodeNumber].dx ) * grid0.yNodes[grid1.yNodes[nodeNumber].upwindNodesNumber[0]].primaryVariableSlope 
-                                
-        else:
-        
-            primVar_Adv = grid0.yNodes[ grid1.yNodes[nodeNumber].downwindNodesNumber[0]].primaryVariable[0] - \
-            0.5 * ( 1 + velocity * yTimeStepping.dt / grid1.yNodes[nodeNumber].dx ) * grid0.yNodes[grid1.yNodes[nodeNumber].downwindNodesNumber[0]].primaryVariableSlope 
-           
-        ######
-                        
-        if ( balanceType == 0 ): # mass       
-                
-            grid1.yNodes[nodeNumber].flux = primVar_Adv * velocity
-            
-                   
-        else:  # momentum
-                                     # NO  JUNCTION
-            grid1.yNodes[nodeNumber].flux = primVar_Adv * 0.5 * \
-            ( grid0.yNodes[ grid1.yNodes[nodeNumber].upwindNodesNumber[0]].flux - grid0.yNodes[grid1.yNodes[nodeNumber].downwindNodesNumber[0]].flux )  
-        
-         
-##################################################################################### 
-
-
-    def assignPrimaryVariableSlope ( self, grid0, grid1, nodeNumber ):
-    
-    
-        grid0.yNodes[nodeNumber].primaryVariableSlope = 0   
+    def assign_primary_variable_slope(self, grids, connector_id):
+        grids[0].connectors[connector_id].primary_variable_slope = 0
      
         # NO JUNCTION
-      
-        if ( self.methodNumber == 0 ):   # upwind
-        
+        if self.__method_id == 0:  # upwind
             pass
-            
-            
-        elif ( self.methodNumber == 1 ): # laxWendroff  
-              
-             if ( len ( grid0.yNodes[nodeNumber].downwindNodesNumber ) > 0 ):
-             
-                if ( len ( grid1.yNodes[grid0.yNodes[nodeNumber].downwindNodesNumber[0]].downwindNodesNumber ) > 0 ):
-                
-                    DownDown = grid0.yNodes[grid1.yNodes[grid0.yNodes[nodeNumber].downwindNodesNumber[0]].downwindNodesNumber[0]].primaryVariable[0]
-                    grid0.yNodes[nodeNumber].primaryVariableSlope = DownDown - grid0.yNodes[nodeNumber].primaryVariable[0]                                                                  
-                     
-                    
-        elif ( self.methodNumber == 2 ): # beamWarming 
-                   
-            if ( len ( grid0.yNodes[nodeNumber].upwindNodesNumber ) > 0 ):
-            
-                if ( len ( grid1.yNodes[grid0.yNodes[nodeNumber].upwindNodesNumber[0]].upwindNodesNumber ) > 0 ):
-                
-                    UpUp = grid0.yNodes[grid1.yNodes[grid0.yNodes[nodeNumber].upwindNodesNumber[0]].upwindNodesNumber[0]].primaryVariable[0]    
-                    grid0.yNodes[nodeNumber].primaryVariableSlope = grid0.yNodes[nodeNumber].primaryVariable[0] - UpUp   
-                          
-                         
-        elif ( self.methodNumber == 3 ): # Fromm  
-                
-            if ( len ( grid0.yNodes[nodeNumber].upwindNodesNumber ) > 0 ):
-          
-                if ( len ( grid1.yNodes[grid0.yNodes[nodeNumber].upwindNodesNumber[0]].upwindNodesNumber ) > 0 ):
-            
-                    UpUp = grid0.yNodes[grid1.yNodes[grid0.yNodes[nodeNumber].upwindNodesNumber[0]].upwindNodesNumber[0]].primaryVariable[0]    
+        elif self.__method_id == 1:  # laxWendroff
+            if grids[0].connectors[connector_id].immediate_connectors_id[1]:
+                if grids[1].connectors[grids[0].connectors[
+                              connector_id].immediate_connectors_id[1][0]].immediate_connectors_id[1]:
+                    down_down = grids[0].connectors[grids[1].connectors[grids[0].connectors[
+                        connector_id].immediate_connectors_id[1][0]].immediate_connectors_id[1][0]].primary_variable[0]
+                    grids[0].connectors[connector_id].primary_variable_slope = down_down - grids[0].connectors[
+                        connector_id].primary_variable[0]
+        elif self.__method_id == 2:  # beamWarming
+            if grids[0].connectors[connector_id].immediate_connectors_id[0]:
+                if grids[1].connectors[grids[0].connectors[
+                              connector_id].immediate_connectors_id[0][0]].immediate_connectors_id[0]:
+                    up_up = grids[0].connectors[grids[1].connectors[grids[0].connectors[
+                        connector_id].immediate_connectors_id[0][0]].immediate_connectors_id[0][0]].primary_variable[0]
+                    grids[0].connectors[connector_id].primary_variable_slope = \
+                        grids[0].connectors[connector_id].primary_variable[0] - up_up
+        elif self.__method_id == 3:  # Fromm
+            if grids[0].connectors[connector_id].immediate_connectors_id[0]:
+                if grids[1].connectors[grids[0].connectors[
+                              connector_id].immediate_connectors_id[0][0]].immediate_connectors_id[0]:
+                    up_up = grids[0].connectors[grids[1].connectors[grids[0].connectors[
+                        connector_id].immediate_connectors_id[0][0]].immediate_connectors_id[0][0]].primary_variable[0]
+                    if grids[0].connectors[connector_id].immediate_connectors_id[1]:
+                        if grids[1].connectors[grids[0].connectors[connector_id].immediate_connectors_id[
+                                      1][0]].immediate_connectors_id[1]:
+                            down_down = grids[0].connectors[grids[1].connectors[grids[0].connectors[
+                                connector_id].immediate_connectors_id[1][0]].immediate_connectors_id[
+                                1][0]].primary_variable[0]
+                            grids[0].connectors[connector_id].primary_variable_slope = 0.5 * (down_down - up_up)
+        elif self.__method_id == 4:  # vanLeer
+            if grids[0].connectors[connector_id].immediate_connectors_id[0]:
+                if grids[1].connectors[grids[0].connectors[
+                               connector_id].immediate_connectors_id[0][0]].immediate_connectors_id[0]:
+                    up_up = grids[0].connectors[grids[1].connectors[grids[0].connectors[
+                        connector_id].immediate_connectors_id[0][0]].immediate_connectors_id[0][0]].primary_variable[0]
        
-                    if ( len ( grid0.yNodes[nodeNumber].downwindNodesNumber ) > 0 ):
-            
-                        if ( len ( grid1.yNodes[grid0.yNodes[nodeNumber].downwindNodesNumber[0]].downwindNodesNumber ) > 0 ):
-                     
-                            DownDown = grid0.yNodes[grid1.yNodes[grid0.yNodes[nodeNumber].downwindNodesNumber[0]].downwindNodesNumber[0]].primaryVariable[0]
-                            grid0.yNodes[nodeNumber].primaryVariableSlope =  0.5 * ( DownDown - UpUp )
-            
-                            
-        elif ( self.methodNumber == 4 ): # vanLeer  
-            
-            if ( len ( grid0.yNodes[nodeNumber].upwindNodesNumber ) > 0 ):
-          
-                if ( len ( grid1.yNodes[grid0.yNodes[nodeNumber].upwindNodesNumber[0]].upwindNodesNumber ) > 0 ):
-             
-                    UpUp = grid0.yNodes[grid1.yNodes[grid0.yNodes[nodeNumber].upwindNodesNumber[0]].upwindNodesNumber[0]].primaryVariable[0]    
+                    if grids[0].connectors[connector_id].immediate_connectors_id[1]:
+                        if grids[1].connectors[grids[0].connectors[
+                                      connector_id].immediate_connectors_id[1][0]].immediate_connectors_id[1]:
+                            down_down = grids[0].connectors[grids[1].connectors[grids[0].connectors[
+                                connector_id].immediate_connectors_id[1][0]].immediate_connectors_id[
+                                1][0]].primary_variable[0]
+                            grids[0].connectors[connector_id].primary_variable_slope = \
+                                calculate_vanLeer_limiter(grids[0], connector_id, up_up, down_down)
+        elif self.__method_id == 5:  # minmod
+            if grids[0].connectors[connector_id].immediate_connectors_id[0]:
+                if grids[1].connectors[grids[0].connectors[
+                              connector_id].immediate_connectors_id[0][0]].immediate_connectors_id[0]:
+                    up_up = grids[0].connectors[grids[1].connectors[grids[0].connectors[
+                        connector_id].immediate_connectors_id[0][0]].immediate_connectors_id[0][0]].primary_variable[0]
        
-                    if ( len ( grid0.yNodes[nodeNumber].downwindNodesNumber ) > 0 ):
-            
-                        if ( len ( grid1.yNodes[grid0.yNodes[nodeNumber].downwindNodesNumber[0]].downwindNodesNumber ) > 0 ):
-                     
-                            DownDown = grid0.yNodes[grid1.yNodes[grid0.yNodes[nodeNumber].downwindNodesNumber[0]].downwindNodesNumber[0]].primaryVariable[0]
-                            grid0.yNodes[nodeNumber].primaryVariableSlope =  primaryVariableSlopeVanLeer ( grid0, nodeNumber, UpUp, DownDown )
-            
-                            
-        elif ( self.methodNumber == 5 ): # minmod   
-               
-            if ( len ( grid0.yNodes[nodeNumber].upwindNodesNumber ) > 0 ):
-          
-                if ( len ( grid1.yNodes[grid0.yNodes[nodeNumber].upwindNodesNumber[0]].upwindNodesNumber ) > 0 ):
-             
-                    UpUp = grid0.yNodes[grid1.yNodes[grid0.yNodes[nodeNumber].upwindNodesNumber[0]].upwindNodesNumber[0]].primaryVariable[0]    
-       
-                    if ( len ( grid0.yNodes[nodeNumber].downwindNodesNumber ) > 0 ):
-            
-                        if ( len ( grid1.yNodes[grid0.yNodes[nodeNumber].downwindNodesNumber[0]].downwindNodesNumber ) > 0 ):
-                     
-                            DownDown = grid0.yNodes[grid1.yNodes[grid0.yNodes[nodeNumber].downwindNodesNumber[0]].downwindNodesNumber[0]].primaryVariable[0]
-                            grid0.yNodes[nodeNumber].primaryVariableSlope = primaryVariableSlopeMinmod ( grid0, nodeNumber, UpUp, DownDown )
-            
-        else: 
-        
-            print ("Error in waterDepthSlope calculation: Numerical method not defined !!!")  
-    
-    
-#####################################################################################
-            
-
-def primaryVariableSlopeVanLeer ( grid0, nodeNumber, UpUp, DownDown ):
-
-         
-    hlp = ( DownDown - grid0.yNodes[nodeNumber].primaryVariable[0] ) * ( grid0.yNodes[nodeNumber].primaryVariable[0] - UpUp )
-    
-    if ( hlp > 0 ):         
-                                                  
-        return  2 * hlp / ( DownDown - UpUp )
-    
-    else:
-        
-        return  0    
-
-            
-#####################################################################################
-#
-# global functions
-#
-            
-
-def primaryVariableSlopeMinmod ( grid0, nodeNumber, UpUp, DownDown ):
-
-                                   
-    a = grid0.yNodes[nodeNumber].primaryVariable[0] - UpUp                                               
-    b = DownDown - grid0.yNodes[nodeNumber].primaryVariable[0]
-     
-    if ( a * b > 0 ):
-        
-        if ( abs ( a ) < abs ( b )  ):
-        
-            return  a 
-            
+                    if grids[0].connectors[connector_id].immediate_connectors_id[1]:
+                        if grids[1].connectors[grids[0].connectors[
+                                      connector_id].immediate_connectors_id[1][0]].immediate_connectors_id[1]:
+                            down_down = grids[0].connectors[grids[1].connectors[grids[0].connectors[
+                                connector_id].immediate_connectors_id[1][0]].immediate_connectors_id[
+                                1][0]].primary_variable[0]
+                            grids[0].connectors[connector_id].primary_variable_slope = \
+                                calculate_minmod_limiter(grids[0], connector_id, up_up, down_down)
         else:
-        
-            return  b
-            
+            print("Error in waterDepthSlope calculation: Numerical method not defined !!!")
+
+    def assign_velocity(self, grids, connector_id, timemarching, laws, balance_type):
+        if balance_type == 0:  # mass
+            if self.__momentum_flac:  # Saint-Venant
+                pass  # velocity calculated in momentum balance
+            else:
+                grids[1].connectors[connector_id].primary_variable[0] = \
+                    grids[1].connectors[connector_id].primary_variable[1] = \
+                    laws[grids[1].connectors[connector_id].law_id].calculate_celerity(
+                        grids[1].connectors[connector_id].geometry, grids[1].assign_centered_primary_variable(
+                            connector_id, 0))
+                # for timemarching
+            if abs(grids[1].connectors[connector_id].primary_variable[0] / grids[1].connectors[connector_id].length) \
+                    > timemarching.velocity_max:
+                timemarching.velocity_max = abs(grids[1].connectors[connector_id].primary_variable[0])
+        else:  # momentum
+            grids[1].connectors[connector_id].velocity_centered = \
+                grids[1].assign_centered_primary_variable(connector_id, 0)  # for flux
+
+
+def calculate_flux(grids, connector_id, timemarching, balance_type):
+    if balance_type == 0:  # mass
+        velocity = grids[1].connectors[connector_id].primary_variable[0]
     else:
-    
-        return  0    
-                    
-            
-##################################################################################### 
-                                                                                             
+        velocity = grids[1].connectors[connector_id].velocity_centered  # NO  JUNCTION
+
+    if velocity > 0:
+        # NO JUNCTION
+        primvar_advection = grids[0].connectors[grids[1].connectors[connector_id].immediate_connectors_id[
+            0][0]].primary_variable[0] + 0.5 * (1 - velocity * timemarching.stepsize /
+                                                grids[1].connectors[connector_id].length) * \
+            grids[0].connectors[grids[1].connectors[connector_id].immediate_connectors_id[0][0]].primary_variable_slope
+    else:
+        primvar_advection = grids[0].connectors[grids[1].connectors[connector_id].immediate_connectors_id[
+            1][0]].primary_variable[0] - 0.5 * (1 + velocity * timemarching.stepsize /
+                                                grids[1].connectors[connector_id].length) * \
+            grids[0].connectors[grids[1].connectors[connector_id].immediate_connectors_id[1][0]].primary_variable_slope
+
+    if balance_type == 0:  # mass
+        grids[1].connectors[connector_id].flux = primvar_advection * velocity
+    else:  # momentum
+        #  NO  JUNCTION
+        grids[1].connectors[connector_id].flux = primvar_advection * 0.5 * (
+            grids[0].connectors[grids[1].connectors[connector_id].immediate_connectors_id[0][0]].flux -
+            grids[0].connectors[grids[1].connectors[connector_id].immediate_connectors_id[1][0]].flux)
+
+
+def calculate_vanLeer_limiter(grid, connector_id, up_up, down_down):
+    hlp = (down_down - grid.connectors[connector_id].primary_variable[0]) * \
+         (grid.connectors[connector_id].primary_variable[0] - up_up)
+
+    return 2 * hlp / (down_down - up_up) if hlp > 0 else 0
+
+
+def calculate_minmod_limiter(grid, connector_id, up_up, down_down):
+    a = grid.connectors[connector_id].primary_variable[0] - up_up
+    b = down_down - grid.connectors[connector_id].primary_variable[0]
+     
+    if a * b > 0:
+        return a if abs(a) < abs(b) else b
+    else:
+        return 0    
