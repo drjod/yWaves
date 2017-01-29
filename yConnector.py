@@ -9,7 +9,7 @@ class yConnector:
     __velocity_centered = float()
 
     __froude_number = float()
-    __flux = float()  # massFlux, momentumFlux_timestepsizelength
+    __flux = float()  # mass flux (grid 0), momentum flux (grid 1)
 
     def __init__(self, _id, geometry, primary_variable, ghost,
                  source_term, boundary_condition, immediate_connectors_id, length, law_id):
@@ -22,9 +22,6 @@ class yConnector:
         self.__immediate_connectors_id = immediate_connectors_id
         self.__length = length
         self.__law_id = law_id  # only used for links (grid 1)
-
-        # if connectorNew.geometry < 0:
-        #    print("Warning: Slope < 0 at link " + str(int(linevariables[0])))
 
     @property
     def id(self):
